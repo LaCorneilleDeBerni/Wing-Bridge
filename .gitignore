@@ -1,0 +1,73 @@
+# Artefacts produits quand on lance le code DEPUIS LES SOURCES (test de fumée,
+# `python3 wing_ui.py`). En app figée, ces fichiers vont dans
+# ~/Library/Application Support/Wing Bridge/ — voir wing_mapper._default_profile_dir().
+# Ils réapparaissent tout seuls : ce ne sont pas des déchets, ne pas s'en étonner.
+src/wing_server.log
+src/wing_server.log.1
+src/wing_server-*.log
+src/wing_hw_state.json
+src/settings.json
+
+# Bancs de test manuel et code mort : retirés du suivi le 31/08/2026 lors de
+# la préparation open-source. Restent sur disque en local, jamais dans le dépôt.
+src/sandbox/
+src/archives/
+
+# Captures USB de travail : volumineuses et porteuses du firmware applicatif
+# (propriété MA Lighting). Jamais dans le dépôt.
+Wireshark capture/
+
+# Instructions internes de reprise (carte du projet pour les IA qui reprennent
+# le travail). Gardées EN LOCAL, hors du dépôt public — retirées du suivi le
+# 31/08/2026. Renommées le 27/09/2026 (scrub pré-publication) pour ne plus
+# porter le nom d'un outil précis dans le code public qui les référence ;
+# CLAUDE.md reste ignoré aussi, au cas où un outil d'assistance en dépose un
+# localement.
+/CLAUDE.md
+**/CLAUDE.md
+/GUIDE_PROJET.md
+**/GUIDE_PROJET.md
+
+# Journal de bord daté / statut interne : récit chronologique build par build,
+# post-mortems, feuille de route. Gardés EN LOCAL, hors du dépôt public —
+# retirés du suivi le 31/08/2026. Le public a CHANGELOG.md + CONTRIBUTING.md.
+# Les leçons « ne pas refaire » ont été rapatriées dans docs/<sous-système>.md.
+/docs/HISTORIQUE.md
+/docs/RELEASES.md
+/docs/ETAT_PROJET.md
+
+# Python
+__pycache__/
+*.pyc
+
+# Venv Windows du banc de test USB (chantier 13). Sur macOS le venv est
+# ~/wing-env, HORS du dépôt ; ici il est créé dans l'arbre, donc à exclure.
+wing-env-windows/
+
+# macOS
+.DS_Store
+
+# Builds PyInstaller (les scripts travaillent dans un dossier temporaire, mais
+# au cas où on lance pyinstaller à la main)
+build/
+dist/
+*.spec
+
+# Sortie du build Windows (build_windows.ps1) : moteur + assistant clavier figés.
+# Artefact de build, jamais édité à la main.
+dist-windows/
+
+# L'application distribuée : artefact de build (build_server.sh / build_app.sh),
+Wing Bridge Officiel/Wing Bridge.app/
+
+# Profils : seuls les profils de RÉFÉRENCE livrés sont trackés. Tout profil
+# créé en lançant depuis les sources (wing_mapper._default_profile_dir()) tombe
+src/profiles/*
+!src/profiles/__reference__.json
+!src/profiles/défauts.json
+
+# Firmware de la wing — propriété de MA Lighting, jamais dans le dépôt.
+/src/wing_firmware.bin
+
+# Config Claude Code locale (permissions par machine)
+.claude/settings.local.json

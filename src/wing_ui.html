@@ -1,0 +1,1693 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wing → grandMA3</title>
+<style>
+:root {
+  --bg: #14171c; --card: #1d2229; --card2: #242b34;
+  --text: #e8eaed; --muted: #8b95a1;
+  --accent: #ffb400; --green: #3ddc84; --red: #ff5252; --blue: #4da3ff;
+  --border: #2e3742;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+  min-height: 100vh;
+}
+.topbar { position: sticky; top: 0; z-index: 100; }
+header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 22px; background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+header h1 { font-size: 17px; font-weight: 600; margin-right: auto; }
+header h1 span { color: var(--accent); }
+header h1 .ver { color: var(--muted); font-size: 12px; font-weight: 400; }
+/* ── Barre du haut : largeur des 4 boutons figée entre FR et EN ───────────
+   Comme la <nav>, le <header> est un flexbox où chaque bouton se
+   dimensionnait à son texte : le header se décalait et « sautait » à la
+   bascule de langue. min-width par bouton = max(largeur FR, largeur EN)
+   mesurée dans WebKit (padding 9px 16px + bordure 1px inclus, box-sizing
+   border-box global) + ~2 px de marge. Le FR est la contrainte sur les 4
+   (« Safe config » EN talonne « Config sûre » FR à ~1,5 px près) : le header
+   FR ne bouge quasiment pas, seul l'EN cesse de rétrécir. Ciblé par
+   .topbar > header > button:nth-of-type(n) : le sélecteur de langue est dans
+   .langsel (pas un enfant direct de <header>, donc pas compté), et le préfixe
+   .topbar évite les <header> des modales (bouton « Fermer »). Recaler si un
+   label bouton change dans l'une ou l'autre langue. */
+.topbar > header > button:nth-of-type(1) { min-width: 133px; }  /* « 💾 Enregistrer » FR ~131 · « 💾 Save » EN ~89 */
+.topbar > header > button:nth-of-type(2) { min-width: 136px; }  /* « 🛟 Config sûre » FR ~134 · « 🛟 Safe config » EN ~132 */
+.topbar > header > button:nth-of-type(3) { min-width: 137px; }  /* « 🔄 Réinitialiser » FR ~134 · « 🔄 Reset » EN ~95 */
+.topbar > header > button:nth-of-type(4) { min-width: 99px;  }  /* « ⏻ Quitter » FR ~97 · « ⏻ Quit » EN ~78 */
+/* Sélecteur de langue — discret, à côté du numéro de build. L'actif ressort. */
+.langsel { display: flex; gap: 2px; }
+.langsel button {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 6px; padding: 3px 6px; font-size: 13px; cursor: pointer;
+  line-height: 1; filter: grayscale(1); opacity: .55;
+}
+.langsel button:hover { opacity: .85; }
+.langsel button.actif { border-color: var(--accent); filter: none; opacity: 1; }
+.pill {
+  padding: 5px 12px; border-radius: 20px; font-size: 12.5px;
+  background: var(--card2); border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 7px;
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); }
+.dot.on { background: var(--green); }
+.dot.warn { background: var(--accent); }
+.dot.busy { background: var(--accent); animation: blink .8s infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+/* Ouvrir l'onglet Profils fait clignoter le profil ACTIF dans l'en-tête —
+   c'est ce qui a permis de supprimer l'encart « Profil courant », qui
+   occupait un demi-écran pour la même information. Trois pulsations, puis
+   plus rien : un clignotement permanent serait du bruit. */
+@keyframes designe { 0%,100% { color: inherit; } 50% { color: var(--accent); } }
+#profTxt.designe { animation: designe .55s ease-in-out 3; }
+
+/* ── Panneau santé (coup d'œil régie) ── */
+.health {
+  /* ⚠️ `nowrap` : les 5 états tiennent sur UNE ligne, toujours. Avec `wrap`
+     ils basculaient sur deux rangs dès que la fenêtre rétrécissait, et on
+     perdait le coup d'œil unique qui est toute la raison d'être de cette
+     barre. Chaque case partage la largeur à parts égales (`flex: 1 1 0`) et
+     peut se réduire (`min-width: 0`) — c'est le MESSAGE qui absorbe, en
+     défilant, jamais la mise en page qui casse. */
+  display: flex; gap: 8px; flex-wrap: nowrap;
+  padding: 9px 22px; background: var(--card2);
+  border-bottom: 1px solid var(--border);
+}
+/* ── Barre d'états : toutes les pastilles à la MÊME taille ────────────────
+   Avant, chaque pastille se dimensionnait sur son texte : « Bridge arrêté »
+   faisait 120 px et « Sonde MA3 sonde silencieuse depuis 445 s… » débordait sur
+   toute la largeur. Impossible de balayer la barre du regard.
+   Maintenant : largeur égale, étiquette alignée à gauche sur une colonne fixe,
+   et le message occupe la zone de droite — en DÉFILANT s'il ne tient pas. */
+.hitem {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 13px; border-radius: 9px;
+  background: var(--bg); border: 1px solid var(--border);
+  font-size: 13px;
+  flex: 1 1 0; min-width: 0;          /* parts égales, une seule ligne */
+  padding: 6px 10px;
+}
+/* Colonne d'étiquettes courte : elle sert à IDENTIFIER, pas à occuper la
+   place. Chaque pixel repris ici va au message, qui est l'information utile. */
+.hitem .hlbl { color: var(--muted); flex: 0 0 66px; white-space: nowrap; }
+/* Fenêtre du message : ce qui dépasse est masqué, et défile EN BOUCLE. */
+.hitem .hzone { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.hitem .hdefile { display: flex; width: max-content; }
+.hitem .hval { font-weight: 600; white-space: nowrap; }
+
+/* ── Boucle sans raccord visible ───────────────────────────────────────────
+   La piste contient DEUX copies identiques du message. On la translate
+   d'exactement UNE copie (-50 % de la piste) : au terme de l'animation, la 2e
+   copie occupe la place où la 1re a commencé, donc le retour à zéro est
+   invisible. C'est ce qui remplace l'aller-retour, qui « sautait » au début.
+
+   ⚠️ L'ESPACE ENTRE FIN ET DÉBUT EST DANS LA COPIE, pas dans un `gap` du
+   flex : un `gap` compterait une seule fois pour deux copies, et -50 % ne
+   tomberait plus juste — le raccord se verrait. En padding, chaque copie fait
+   exactement la même largeur, et le compte est exact. */
+.hitem .hzone.defile .hval { padding-right: 46px; }
+.hitem .hzone.defile .hdefile {
+  animation: defileTexte var(--duree, 14s) linear infinite;
+}
+@keyframes defileTexte {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.hdot { width: 11px; height: 11px; border-radius: 50%; background: var(--red); flex: none; }
+.hdot.on   { background: var(--green); box-shadow: 0 0 8px rgba(61,220,132,.55); }
+.hdot.warn { background: var(--accent); animation: blink .8s infinite; }
+.hdot.off  { background: #565e6b; }
+
+/* ── Fenêtre d'aide ────────────────────────────────────────────────────────
+   Remplace les 11 blocs <details> semés dans le balisage (7 rien que dans
+   Bridge). L'aide se DEMANDE maintenant, elle ne s'impose plus : l'écran reste
+   dégagé pour ce qui sert en régie. */
+.voile {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(8,10,13,.72); backdrop-filter: blur(2px);
+  display: none; align-items: center; justify-content: center; padding: 30px;
+}
+.voile.ouvert { display: flex; }
+.modale {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; max-width: 720px; width: 100%;
+  max-height: 82vh; display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55);
+}
+.modale header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 15px 20px; border-bottom: 1px solid var(--border);
+  background: none;
+}
+.modale h3 { font-size: 15px; font-weight: 600; margin-right: auto; }
+.modale .corps { padding: 18px 22px; overflow-y: auto; font-size: 13.5px;
+  line-height: 1.65; color: var(--muted); }
+.modale .corps h4 { color: var(--accent); font-size: 13px; margin: 16px 0 6px;
+  text-transform: uppercase; letter-spacing: .04em; }
+.modale .corps h4:first-child { margin-top: 0; }
+.modale .corps b { color: var(--text); }
+.modale .corps ul { margin: 6px 0 6px 20px; }
+.modale .corps li { margin-bottom: 5px; }
+.modale .corps p { margin-bottom: 9px; }
+.modale .corps .hnote { background: var(--bg); border-left: 3px solid var(--border);
+  padding: 9px 12px; border-radius: 0 7px 7px 0; }
+.modale .corps .rouge { color: var(--red); }
+.modale .corps .vert { color: var(--green); }
+/* Le « ? » d'un réglage : discret, mais atteignable. */
+/* Réglages : une ligne = une case, un libellé, un « ? ». Tout aligné à
+   gauche, sans cadre — le cadre n'apportait rien qu'une bordure. */
+.reglages { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+.reglage { display: flex; align-items: center; gap: 9px; }
+.reglage label { display: flex; align-items: center; gap: 8px;
+  color: var(--muted); font-size: 13.5px; cursor: pointer; }
+
+button.aide {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  width: 19px; height: 19px; border-radius: 50%; cursor: pointer;
+  font-size: 11px; line-height: 1; padding: 0; flex: none;
+}
+button.aide:hover { border-color: var(--accent); color: var(--accent); }
+
+nav {
+  display: flex; gap: 4px; padding: 10px 22px 0;
+  border-bottom: 1px solid var(--border); background: var(--bg);
+  overflow-x: auto;   /* fenêtre très étroite : la barre défile au lieu de casser */
+}
+nav button {
+  background: none; border: none; color: var(--muted);
+  font-size: 14px; padding: 10px 16px; cursor: pointer;
+  border-bottom: 2px solid transparent; font-weight: 500;
+  text-align: center;  /* labels EN (plus courts) restent centrés dans le gabarit FR */
+  flex: none;          /* garder le gabarit même quand la barre défile */
+}
+/* min-width par onglet = largeur rendue du label FR (14px / poids 500, padding
+   10px 16px inclus car box-sizing: border-box global) + ~2 px de marge, mesurée
+   au navigateur. Par onglet et non uniforme : un min-width unique calé sur
+   « Paramètres » (~108 px) écarterait trop les onglets courts (« Aide », ~62 px).
+   Ciblé par nth-child (l'ordre des onglets est figé par smoke_test test_onglets,
+   et un sélecteur [data-tab="…"] serait compté à tort comme un onglet par ce
+   contrôle). Valeur = max(largeur FR, largeur EN) : le FR est le plus long
+   partout SAUF « Profils » où l'anglais « Profiles » (~82 px) dépasse. Recaler
+   si un label de la nav change dans l'une ou l'autre langue. */
+nav button:nth-child(1) { min-width: 78px;  }  /* « Bridge »     FR ~75  EN ~40  */
+nav button:nth-child(2) { min-width: 90px;  }  /* « Touches »    FR ~88  EN ~40  */
+nav button:nth-child(3) { min-width: 79px;  }  /* « Faders »     FR ~77  EN ~77  */
+nav button:nth-child(4) { min-width: 105px; }  /* « Encodeurs »  FR ~102 EN ~95  */
+nav button:nth-child(5) { min-width: 84px;  }  /* « Profils »    FR ~74  EN ~82 (contrainte EN) */
+nav button:nth-child(6) { min-width: 110px; }  /* « Paramètres » FR ~108 EN ~78  (contrainte FR) */
+nav button:nth-child(7) { min-width: 64px;  }  /* « Aide »       FR ~62  EN ~40  */
+nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+nav button:hover { color: var(--text); }
+
+main { padding: 20px 22px; max-width: 1100px; margin: 0 auto; }
+section { display: none; }
+section.active { display: block; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px; margin-bottom: 16px;
+}
+.card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .5px; }
+
+button.btn {
+  background: var(--card2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 16px; font-size: 14px; cursor: pointer; font-weight: 500;
+}
+button.btn:hover { border-color: var(--muted); }
+button.btn.primary { background: var(--accent); color: #14171c; border: none; }
+button.btn.primary:hover { filter: brightness(1.1); }
+button.btn.danger { color: var(--red); }
+button.btn.green { background: var(--green); color: #14171c; border: none; }
+button.btn.big { font-size: 15px; padding: 12px 24px; }
+
+input[type=text], input[type=number], select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; font-size: 14px; outline: none;
+}
+input:focus, select:focus { border-color: var(--accent); }
+input.small { width: 64px; text-align: center; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: var(--card2); }
+td .mini { background: none; border: none; color: var(--red); cursor: pointer; font-size: 13px; }
+code { background: var(--bg); padding: 2px 7px; border-radius: 5px; font-size: 12.5px;
+  font-family: "SF Mono", Menlo, monospace; color: var(--accent); }
+
+.learnzone {
+  border: 2px dashed var(--border); border-radius: 12px;
+  padding: 26px; text-align: center; margin-bottom: 16px;
+  transition: all .2s;
+}
+.learnzone.waiting { border-color: var(--accent); background: rgba(255,180,0,.05); }
+.learnzone .hint { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.learnzone .big-id { font-size: 26px; font-weight: 700; color: var(--accent);
+  font-family: "SF Mono", Menlo, monospace; }
+
+.assignform { display: flex; flex-direction: column; gap: 12px; margin-top: 16px;
+  text-align: left; max-width: 520px; margin-left: auto; margin-right: auto; }
+.radio-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.radio-row label {
+  flex: 1; min-width: 110px; padding: 10px; border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; font-size: 13px; text-align: center;
+  background: var(--card2);
+}
+.radio-row input { display: none; }
+.radio-row label.sel { border-color: var(--accent); color: var(--accent); }
+.formrow { display: flex; gap: 8px; }
+.formrow input { flex: 1; }
+
+.fader-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.fader-item {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px; display: flex; align-items: center;
+  flex-wrap: wrap; gap: 6px 10px;
+  transition: all .15s;
+}
+.fader-item.hl { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,180,0,.3); }
+.fader-item .fname { font-weight: 700; font-size: 15px; width: 30px; }
+.fader-item select.fkind { font-size: 12.5px; padding: 4px 6px; }
+.fader-item select.fkind:disabled { opacity: .5; cursor: not-allowed; }
+
+.encgroup { background: var(--card2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.encgroup .gtitle { font-weight: 600; margin-bottom: 10px; font-size: 13.5px; }
+.encrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.encrow input { width: 100%; font-size: 13px; }
+.enclabel { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+/* Case de roue dont le nom n'existe pas dans MA3 (contrôle actif seulement
+   quand la vraie liste de MA3 a pu être lue — sinon aucun signalement). */
+.encrow input.bad { border-color: var(--red); background: rgba(255,90,90,.08); }
+/* Répertoire des attributs valides */
+.attrgrp { margin-bottom: 12px; }
+.attrgrp .gtitle { font-weight: 600; font-size: 12.5px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+/* Types de fader (onglet Faders) */
+.fftab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.fftab th { text-align: left; font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; padding: 0 8px 6px 0;
+  font-weight: 600; }
+.fftab td { padding: 5px 8px 5px 0; border-top: 1px solid var(--border);
+  vertical-align: top; }
+.fftab code { font-size: 11.5px; white-space: nowrap; }
+.fftab .okmark { color: var(--green); }
+/* 346 attributs = ~1450 px : on borne, sinon le répertoire noie l'onglet. */
+#attrList { max-height: 340px; overflow-y: auto; padding-right: 4px; }
+.attrchips { display: flex; flex-wrap: wrap; gap: 5px; }
+.attrchips button { background: var(--card2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 3px 8px; font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+.attrchips button:hover { border-color: var(--accent); color: var(--accent); }
+.attrchips button.hit { border-color: var(--accent); }
+
+#logbox {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; height: 380px; overflow-y: auto;
+  font-family: "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.7;
+  white-space: pre-wrap; color: #b8c2cc;
+}
+.bufbar {
+  background: var(--bg); border: 1px solid var(--accent); border-radius: 10px;
+  padding: 12px 16px; font-family: "SF Mono", Menlo, monospace; font-size: 15px;
+  margin-bottom: 14px; min-height: 45px; color: var(--accent);
+}
+.bufbar .lbl { color: var(--muted); font-size: 11px; font-family: inherit; display: block; }
+.profile-list button { margin-left: auto; }
+.profile-row { display: flex; align-items: center; gap: 10px; padding: 10px;
+  border-bottom: 1px solid var(--border); }
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.intro { background: var(--card2); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;
+  font-size: 13.5px; line-height: 1.6; color: var(--text); }
+.intro b { color: var(--accent); }
+.intro .t { font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px; }
+.muted { color: var(--muted); font-size: 13px; }
+
+/* Blocs d'aide repliables (<details class="help">). Repliés par défaut pour
+   dégager l'écran ; l'état ouvert/fermé de chacun est mémorisé (localStorage,
+   cf. initHelp()) pour ne pas avoir à les rouvrir à chaque rechargement. */
+details.help { margin-top: 10px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--card2); overflow: hidden; }
+details.help > summary { cursor: pointer; padding: 9px 12px; font-size: 12.5px;
+  color: var(--muted); list-style: none; user-select: none; }
+details.help > summary::-webkit-details-marker { display: none; }
+details.help > summary::before { content: "▸"; display: inline-block;
+  width: 14px; transition: transform .15s ease; }
+details.help[open] > summary::before { transform: rotate(90deg); }
+details.help > summary:hover { color: var(--text); background: rgba(255,255,255,.03); }
+details.help .hbody { padding: 2px 14px 13px 14px; font-size: 12.5px;
+  line-height: 1.7; color: var(--muted); }
+details.help .hbody b { color: var(--text); }
+/* Variantes colorées : conservent le code couleur des anciens encadrés */
+details.help.info { background: rgba(77,163,255,.07); border-color: var(--blue); }
+details.help.info > summary { color: var(--blue); font-weight: 600; }
+details.help.warn { background: rgba(255,180,0,.07); border-color: var(--accent); }
+details.help.warn > summary { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+<header>
+  <h1>Wing <span>→</span> grandMA3
+      <span class="ver" id="buildTag" title="Numéro de build — donne-le en cas de souci
+pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip">…</span></h1>
+  <div class="langsel" title="Langue de l'interface / Interface language">
+    <button id="langFr" class="actif" onclick="appliquerLangue('fr')" aria-label="Français">🇫🇷</button>
+    <button id="langEn" onclick="appliquerLangue('en')" aria-label="English">🇬🇧</button>
+  </div>
+  <div class="pill"><span data-i18n="ui.entete.profil_label">Profil :</span> <b id="profTxt">—</b><span id="dirtyDot" style="display:none;color:var(--accent);margin-left:6px" title="Modifications non enregistrées" data-i18n="ui.entete.modifie" data-i18n-title="ui.entete.modifie_tip">● modifié</span></div>
+  <button class="btn" id="saveHdrBtn" onclick="saveActiveProfile()" data-i18n="ui.entete.bouton.enregistrer" data-i18n-title="ui.entete.bouton.enregistrer_tip" title="Enregistrer les modifications sur le profil actif">💾 Enregistrer</button>
+  <button class="btn" onclick="restoreReference()" title="Revenir à ta config sûre (le connu-qui-marche) — filet de sécurité" data-i18n="ui.entete.bouton.config_sure" data-i18n-title="ui.entete.bouton.config_sure_tip">🛟 Config sûre</button>
+  <button class="btn" onclick="hardReset()" title="Gros bug / MA3 mis à jour / plus rien ne répond : redémarre le moteur ET l'assistant clavier, sans Terminal" data-i18n="ui.entete.bouton.reinit" data-i18n-title="ui.entete.bouton.reinit_tip">🔄 Réinitialiser</button>
+  <button class="btn danger" onclick="quitApp()" title="Quitte l'app en libérant la wing (attend la fin de la lecture USB en cours). ⚠️ La wing repart en veille : au prochain lancement, l'app doit lui RENVOYER SON FIRMWARE, et ça ne passe pas toujours du premier coup — un débranchement/rebranchement du câble suffit alors." data-i18n="ui.entete.bouton.quitter" data-i18n-title="ui.entete.bouton.quitter_tip">⏻ Quitter</button>
+</header>
+
+<!-- Bandeau de récupération : visible UNIQUEMENT après une sortie non propre.
+     Placé tout en haut, avant même le panneau de santé : si des heures de
+     mapping ont été retrouvées, c'est la première chose à voir. -->
+<div id="recoveryBar" style="display:none; padding:12px 20px; background:rgba(255,180,0,.14);
+     border-bottom:1px solid var(--accent); font-size:13px; line-height:1.6">
+  <b style="color:var(--accent)" data-i18n="ui.recup.titre">⚠️ Modifications non enregistrées retrouvées</b>
+  <span id="recoveryTxt" class="muted"></span>
+  <button class="btn primary" style="margin-left:10px" onclick="recoverProfile()" data-i18n="ui.recup.bouton.recuperer">↩︎ Récupérer</button>
+  <button class="btn" onclick="discardRecovery()" data-i18n="ui.recup.bouton.ignorer">Ignorer</button>
+</div>
+
+<div class="health" id="healthBar" title="État de la chaîne, en temps réel" data-i18n-title="ui.sante.barre_tip">
+  <div class="hitem" id="hBridge"><span class="hdot"></span><span class="hlbl" data-i18n="ui.sante.bridge">Bridge</span><span class="hzone"><span class="hdefile"><span class="hval">…</span><span class="hval" aria-hidden="true"></span></span></span></div>
+  <div class="hitem" id="hWing"><span class="hdot"></span><span class="hlbl" data-i18n="ui.sante.wing">Wing USB</span><span class="hzone"><span class="hdefile"><span class="hval">…</span><span class="hval" aria-hidden="true"></span></span></span></div>
+  <div class="hitem" id="hOsc"><span class="hdot"></span><span class="hlbl" data-i18n="ui.sante.osc">MA3 · OSC</span><span class="hzone"><span class="hdefile"><span class="hval">…</span><span class="hval" aria-hidden="true"></span></span></span></div>
+  <div class="hitem" id="hSonde"><span class="hdot"></span><span class="hlbl" data-i18n="ui.sante.sonde">Sonde MA3</span><span class="hzone"><span class="hdefile"><span class="hval">…</span><span class="hval" aria-hidden="true"></span></span></span></div>
+  <div class="hitem" id="hKbd"><span class="hdot"></span><span class="hlbl" data-i18n="ui.sante.kbd">Clavier</span><span class="hzone"><span class="hdefile"><span class="hval">…</span><span class="hval" aria-hidden="true"></span></span></span></div>
+</div>
+
+<nav>
+  <button data-tab="bridge" class="active" data-i18n="ui.nav.bridge">Bridge</button>
+  <button data-tab="touches" data-i18n="ui.nav.touches">Touches</button>
+  <button data-tab="faders" data-i18n="ui.nav.faders">Faders</button>
+  <button data-tab="encodeurs" data-i18n="ui.nav.encodeurs">Encodeurs</button>
+  <button data-tab="profils" data-i18n="ui.nav.profils">Profils</button>
+  <button data-tab="parametres" data-i18n="ui.nav.parametres">Paramètres</button>
+  <button data-tab="aide" data-i18n="ui.nav.aide">Aide</button>
+</nav>
+</div>
+
+<main>
+
+<!-- ═══ BRIDGE ═══ -->
+<section id="tab-bridge" class="active">
+  <div class="intro" data-i18n-html="ui.bridge.intro">
+    <span class="t">Wing Bridge</span>
+    Fait le pont entre une <b>Command Wing grandMA2</b> et <b>grandMA3</b> :
+    touches, faders et roues pilotent MA3 comme une vraie section commande.<br>
+    Deux canaux sont à mettre en place, tous les deux : l'<b>OSC</b> pour les
+    commandes, et un <b>plugin</b> installé dans MA3 qui renvoie l'état de la
+    console (LED des executors, page courante, rattrapage des faders). Un
+    <b>clavier virtuel</b> complète l'ensemble pour la ligne de commande de MA3
+    (mode console). Tout se règle dans l'onglet <b>Paramètres</b>.
+  </div>
+  <!-- ⚠️ Bandeau « firmware non configuré » — masqué tant qu'un firmware est
+       disponible (cache ou blob livré). poll() (bridge.js) le montre/cache
+       selon s.firmware.configure. Sans firmware, la wing ne peut pas démarrer :
+       le bouton renvoie vers « Paramètres → Configurer le firmware ». -->
+  <div id="firmwareBanner" style="display:none; padding:12px 20px;
+       background:rgba(255,180,0,.14); border:1px solid var(--accent);
+       border-radius:8px; font-size:13px; line-height:1.6; margin-bottom:16px">
+    <b style="color:var(--accent)" data-i18n="ui.bridge.fw_banniere.titre">⚠️ Firmware non configuré</b>
+    <span class="muted" data-i18n="ui.bridge.fw_banniere.txt">— la wing ne peut pas démarrer tant qu'aucun firmware
+      n'a été importé.</span>
+    <button class="btn primary" style="margin-left:10px"
+            onclick="allerConfigurerFirmware()" data-i18n="ui.bridge.fw_banniere.bouton">Configurer le firmware</button>
+  </div>
+
+  <!-- ⏹ Encarts 2 et 3 FUSIONNÉS. L'encart « Configuration
+       grandMA3 (à vérifier à chaque session) » n'était qu'un bloc d'aide
+       replié : son contenu est devenu la fenêtre « Vérifier la configuration »,
+       accessible depuis le bouton ci-dessous et réécrite en 4 étapes.
+       Plus de cadre : un bouton et quatre cases, alignés à gauche. -->
+  <div class="toolbar" style="margin-bottom:16px">
+    <button class="btn big green" id="bridgeBtn" onclick="toggleBridge()"
+            title="Démarre la lecture de la wing et l'envoi vers MA3. Si aucune wing n'est connectée, le bridge reste ARMÉ et partira tout seul au branchement." data-i18n="ui.bridge.bouton.demarrer_wing" data-i18n-dynamic data-i18n-title="ui.bridge.bouton.demarrer_tip">▶ Démarrer Wing Bridge</button>
+    <button class="btn" onclick="aide('demarrage')"
+            title="Les 4 points à vérifier pour que tout réponde" data-i18n="ui.bridge.bouton.verifier" data-i18n-title="ui.bridge.bouton.verifier_tip">✓ Vérifier la configuration</button>
+    <!-- 🔴 CORRIGÉ — ce commentaire disait « ne s'affiche QUE si la wing
+         n'est pas connectée », reliquat d'avant le tri en un seul bouton
+         (trois boutons qui s'excluaient par `s.wing`, voir
+         smoke_hardware.py::test_boutons_wing_uniques). Depuis ce tri, un SEUL
+         bouton reste, dont seul le LIBELLÉ suit l'état (bridge.js:150) — mais
+         le `style="display:none"` d'origine, lui, n'avait jamais été retiré :
+         le bouton était invisible EN PERMANENCE, dans les deux états, depuis
+         le refactor. Constaté en direct (« j'ai pas de bouton »)
+         pendant une session où il en avait justement besoin comme dernier
+         recours. Reconnexion automatique : brancher suffit dans le cas
+         nominal. Ce bouton reste le seul moyen de forcer une ré-initialisation
+         quand un blocage persiste. Ne pas le supprimer : contrôle test_boutons_wing_uniques. -->
+    <button class="btn" id="wingBtn" onclick="wingAction()"
+            data-i18n="ui.bridge.wing.connecter" data-i18n-dynamic data-i18n-title="ui.bridge.wing.bouton_tip"
+            title="Force une ré-initialisation de la liaison USB — utile seulement si la wing ne repart pas d'elle-même">🔌 Connecter la wing</button>
+  </div>
+
+  <div class="reglages">
+    <div class="reglage">
+      <label><input type="checkbox" id="suivreMa3" onchange="saveSuivreMa3()"> <span data-i18n="ui.bridge.regl.suivre_ma3">Suivre la configuration réelle de MA3 (faders et boutons d'executor)</span></label>
+      <button class="aide" onclick="aide('suivreMa3')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+    </div>
+    <div class="reglage">
+      <label><input type="checkbox" id="faderPickup" onchange="saveFaderPickup()"> <span data-i18n="ui.bridge.regl.pickup">Rattrapage de fader (pas de saut de niveau après un changement de page)</span></label>
+      <button class="aide" onclick="aide('faderPickup')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+    </div>
+    <div class="reglage">
+      <label><input type="checkbox" id="ledMa3" onchange="saveLedMa3()"> <span data-i18n="ui.bridge.regl.led_ma3">LED reflétant l'état réel de MA3</span></label>
+      <button class="aide" onclick="aide('ledMa3')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+    </div>
+    <div class="reglage">
+      <label><input type="checkbox" id="verbeCible" onchange="saveVerbeCible()"> <span data-i18n="ui.bridge.regl.verbe_cible">Verbe + executor (Store, Move, Assign… puis appui sur un executor)</span></label>
+      <button class="aide" onclick="aide('verbeCible')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+    </div>
+    <div class="reglage">
+      <span class="muted" style="font-size:12.5px" data-i18n="ui.bridge.regl.usb_arrache">Câble USB arraché en plein show ?</span>
+      <button class="aide" onclick="aide('usbArrache')" title="Ce qu'il faut faire" data-i18n-title="ui.bridge.regl.usb_arrache_tip">?</button>
+    </div>
+  </div>
+
+  <!-- ⏹ La carte « ⌨️ Frappe clavier vers MA3 » a été DISSOUTE.
+       Elle affichait en permanence un état que la barre du haut donne déjà
+       (pastille « Clavier »), plus un champ de test et trois blocs d'aide.
+       Où est passé quoi :
+         • l'état          → pastille « Clavier » de la barre d'états
+         • le champ de test → onglet Paramètres (c'est un outil de réglage)
+         • les raccourcis   → onglet Touches (tout ce qui concerne une touche
+                              se trouve maintenant au même endroit)
+         • les aides        → fenêtres « ? » (ui/aides.js)
+         • « mode console » → SUPPRIMÉ : ce n'est plus une option, c'est le
+                              comportement. Le bloc décrivait un choix qui
+                              n'existe plus.
+       ⚠️ Ne reste ici que ce qui demande une ACTION, et seulement quand elle
+       est nécessaire : le bouton d'autorisation Accessibilité. -->
+  <div class="toolbar" id="barreAccess" style="display:none;margin-bottom:16px">
+    <button class="btn" id="accessBtn" onclick="openAccessibility()" data-i18n="ui.bridge.access.bouton">
+      🔓 Autoriser l'Accessibilité</button>
+    <span class="muted" style="font-size:12.5px" data-i18n="ui.bridge.access.txt">Sans cette autorisation, les
+      touches ne peuvent pas atteindre MA3.</span>
+    <button class="aide" onclick="aide('accessibilite')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+  </div>
+
+  <div class="bufbar"><span class="lbl" data-i18n="ui.bridge.buf.label_defaut" data-i18n-dynamic>LIGNE DE COMMANDE</span><span id="bufTxt">&nbsp;</span></div>
+  <div class="card">
+    <h2 data-i18n="ui.bridge.journal.titre">Journal</h2>
+    <div id="logbox"></div>
+    <div class="toolbar" style="margin-top:10px">
+      <button class="btn" onclick="makeDiagnostic()" data-i18n="ui.bridge.journal.bouton_diag">🩺 Créer un diagnostic</button>
+      <span class="muted" id="diagMsg" style="font-size:12.5px" data-i18n="ui.bridge.journal.diag_msg">un seul fichier à envoyer en cas de problème</span>
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:12px">
+      <span data-i18n-html="ui.bridge.journal.note_avant">Ce qui est affiché ici est effacé à chaque redémarrage du moteur ;
+      l'historique complet est conservé dans</span>
+      <code id="logFilePath">…</code>.
+      <span data-i18n-html="ui.bridge.journal.note_apres">Le bouton 🩺 rassemble cet historique, celui de l'assistant clavier et
+      tout l'état de l'app dans <b>un fichier posé sur le Bureau</b> — aucun
+      mot de passe, aucune donnée personnelle dedans.</span>
+    </div>
+  </div>
+
+  <!-- Cycle de vie : fermer la fenêtre éteint le moteur (ui/init.js →
+       /api/fermeture-onglet → wing_ui.vie_loop). Encart PERMANENT et discret :
+       le dialogue bloquant du navigateur dit « on va fermer », celui-ci dit la
+       conséquence (wing → bootloader, comme « ⏻ Quitter »). -->
+  <p class="muted" style="margin-top:14px;font-size:12px" data-i18n="ui.bridge.vie.encart">ⓘ Fermer cette fenêtre éteint Wing Bridge et libère la wing (renvoi du firmware au prochain lancement).</p>
+</section>
+
+<!-- ═══ TOUCHES ═══ -->
+<section id="tab-touches">
+  <div class="intro" data-i18n-html="ui.touches.intro">
+    <span class="t">🔘 Touches — assigner les boutons</span>
+    Décide ce que fait chaque bouton de la wing. Clique <b>Mode apprentissage</b>,
+    appuie sur un bouton physique, et donne-lui une commande MA3
+    (ex. <b>Store</b>, <b>Fixture</b>). Pour un executor, choisis <b>Executor
+    2-rôles</b> puis la <b>Fonction</b> réellement assignée à cet executor dans
+    MA3 — <b>Go+</b>, <b>Toggle</b>, <b>Flash</b>, <b>Swap</b>… (Go+ n'est pas
+    la seule syntaxe, contrairement à ce que l'app faisait avant : chaque
+    executor peut avoir sa propre fonction). <b>Flash / Temp / Swap</b> sont
+    <b>maintenus</b> (actifs tant que le bouton reste enfoncé, coupés au
+    relâchement) — les autres sont des coups uniques. Les assignations sont
+    enregistrées dans le profil courant.<br><br>
+    <b>Double-appui</b> : une commande MA3 supplémentaire, envoyée deux appuis
+    rapprochés sur la même touche (ex. <b>Menu</b> ×2 → <b>SaveShow</b>).
+    ⚠️ Ce champ attend un <b>mot-clé MA3 complet</b> (« SaveShow », « Highlight »,
+    « Hi »…), <b>pas une frappe clavier</b> — contrairement à la colonne
+    « Raccourci clavier » juste à côté, qui elle attend une touche (« H », « F5 »…).
+  </div>
+  <div class="learnzone" id="learnZone">
+    <button class="btn big primary" id="learnBtn" onclick="toggleLearn()" data-i18n="ui.touches.bouton.apprentissage" data-i18n-dynamic>🎯 Mode apprentissage</button>
+    <!-- Les deux façons de configurer une touche, l'une sous l'autre et de
+         même taille : ce sont deux chemins équivalents, pas une action
+         principale et son option. -->
+    <div class="toolbar" style="margin:10px 0;justify-content:center">
+      <button class="btn big" id="btnAssistant" onclick="assistantDemarrer()"
+              title="L'app annonce une touche, tu appuies dessus, elle passe à la suivante. Idéal pour configurer une wing de zéro." data-i18n="ui.touches.bouton.guidee" data-i18n-title="ui.touches.bouton.guidee_tip">
+        🪄 Configuration guidée
+      </button>
+    </div>
+    <div class="toolbar" style="margin-bottom:10px;justify-content:center">
+      <span class="muted" id="assistantEtat"></span>
+    </div>
+    <div class="assignform" id="assistantPanneau" style="display:none">
+      <div class="muted" id="assistantGroupe"></div>
+      <div style="margin:6px 0">
+        <span data-i18n="ui.touches.assistant.appuie">Appuie sur la touche :</span>
+        <span class="big-id" id="assistantCible">—</span>
+      </div>
+      <div class="muted" id="assistantProgres"></div>
+      <div class="formrow" style="margin-top:8px">
+        <button class="btn" onclick="assistantPasser()" data-i18n="ui.touches.assistant.passer">Passer</button>
+        <button class="btn" onclick="assistantReculer()" data-i18n="ui.touches.assistant.revenir">← Revenir</button>
+        <button class="btn" onclick="assistantArreter()" data-i18n="ui.touches.assistant.arreter">Arrêter</button>
+      </div>
+    </div>
+    <div class="hint" id="learnHint" data-i18n="ui.touches.hint">Active le mode, puis appuie sur une touche de la wing.</div>
+    <div class="assignform" id="assignForm" style="display:none">
+      <div><span class="big-id" id="detKey">0x00</span>
+        <span class="muted" id="detCur"></span></div>
+      <div class="radio-row" id="typeRow">
+        <label class="sel" data-v="cmd"><input type="radio" name="atype" value="cmd" checked> <span data-i18n="ui.touches.type.cmd">Commande MA3</span></label>
+        <label data-v="exec"><input type="radio" name="atype" value="exec"> <span data-i18n="ui.touches.type.exec">Executor 2-rôles</span></label>
+        <label data-v="push"><input type="radio" name="atype" value="push"> <span data-i18n="ui.touches.type.push">Push roue</span></label>
+        <label data-v="clear"><input type="radio" name="atype" value="clear"> <span data-i18n="ui.touches.type.clear">Effacer</span></label>
+      </div>
+      <div class="formrow">
+        <select id="assignFunc" style="display:none">
+          <option value="Go+">Go+</option>
+          <option value="Go-">Go-</option>
+          <option value="Toggle">Toggle</option>
+          <option value="Off">Off</option>
+          <option value="Pause">Pause</option>
+          <option value="Flash" data-i18n="ui.touches.func.flash">Flash (maintenu)</option>
+          <option value="Temp" data-i18n="ui.touches.func.temp">Temp (maintenu)</option>
+          <option value="Swap" data-i18n="ui.touches.func.swap">Swap (maintenu)</option>
+        </select>
+        <input type="text" id="assignVal" list="cmdOptions"
+               placeholder="ex : Store  /  Off  /  Please"
+               title="Commence à taper : les mots-clés de TON MA3 sont proposés. La casse est corrigée toute seule à l'enregistrement." data-i18n-title="ui.touches.assign_val.tip" data-i18n-placeholder="ui.touches.assign_val.placeholder">
+        <button class="btn primary" onclick="doAssign()" data-i18n="ui.touches.bouton.assigner">Assigner</button>
+        <button class="btn" onclick="skipAssign()" data-i18n="ui.touches.bouton.passer">Passer</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="toolbar" style="margin-bottom:10px">
+      <span class="muted" data-i18n="ui.touches.renum.label">Renuméroter la rangée</span>
+      <input type="number" id="btnRangee" class="small" min="0" step="100" value="100" style="width:70px"
+             title="Centaine actuelle des executors : 100, 200, 300…" data-i18n-title="ui.touches.renum.rangee_tip">
+      <span class="muted" data-i18n="ui.touches.renum.depuis">→ à partir de l'executor</span>
+      <input type="number" id="btnBase" class="small" min="1" value="101" style="width:70px">
+      <button class="btn" onclick="renumeroterRangee()" data-i18n="ui.touches.renum.appliquer">Appliquer</button>
+      <span class="muted" id="btnRangMsg"></span>
+    </div>
+    <h2 data-i18n="ui.touches.table.titre">Touches assignées</h2>
+    <table>
+      <thead><tr><th data-i18n="ui.touches.th.id">ID</th><th data-i18n="ui.touches.th.commande">Commande</th><th data-i18n="ui.touches.th.ref_exec">Réf. executor (2-rôles)</th><th data-i18n="ui.touches.th.raccourci">Raccourci clavier</th><th title="Commande MA3 complète (ex. SaveShow), PAS une frappe clavier" data-i18n="ui.touches.th.double_appui" data-i18n-title="ui.touches.th.double_appui_tip">Double-appui → commande MA3</th><th></th></tr></thead>
+      <tbody id="btnTable"></tbody>
+    </table>
+  </div>
+  <!-- ⌨️ Les raccourcis clavier ont REJOINT cet onglet. Ils
+       vivaient dans l'onglet Bridge, loin du tableau des touches auxquelles
+       ils s'appliquent. Tout ce qui concerne une touche est maintenant au
+       même endroit. -->
+  <div class="card">
+    <h2 data-i18n="ui.touches.rac.titre">Raccourcis clavier vers MA3</h2>
+    <div class="muted" style="font-size:13px;margin-bottom:10px">
+      <span data-i18n-html="ui.touches.rac.txt">Une partie des touches passe par le clavier plutôt que par l'OSC. Pour
+      qu'elles arrivent, l'app et MA3 doivent être d'accord sur
+      <b>quelle frappe fait quoi</b>.</span>
+      <button class="aide" onclick="aide('raccourcis')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+    </div>
+    <div class="toolbar">
+      <button class="btn primary" id="btnShcuts" onclick="shcutsEnvoyer()"
+              title="Écrit la table de l'app dans MA3, et vérifie ce que la console a réellement pris" data-i18n="ui.touches.rac.bouton_envoyer" data-i18n-title="ui.touches.rac.bouton_envoyer_tip">⌨ Envoyer les raccourcis vers MA3</button>
+      <button class="btn" onclick="resetConsoleKeys()" data-i18n="ui.touches.rac.bouton_reinit">↺ Réinitialiser aux raccourcis MA3</button>
+      <!-- Chemin retour vers Paramètres : utile depuis la configuration guidée
+           (étape 1/3, qui atterrit ici via assistantDemarrer()) — signalé par
+           l'auteur (18/09/2026), qui n'avait aucun chemin de retour en testant
+           l'ancienne étape D (avant qu'elle n'envoie directement sur place,
+           voir #btnShcutsWizard). Scroll + surlignage sur #etapeDRaccourcis. -->
+      <button class="btn" onclick="retourParametresRaccourcis()" data-i18n="ui.touches.rac.bouton_retour">← Retour aux Paramètres</button>
+    </div>
+    <div class="muted" id="shcutsEtat" style="font-size:12.5px;margin-top:10px">…</div>
+    <!-- Horodate du dernier ENVOI réussi (SETTINGS["shcuts_horodate"], jamais
+         un profil — voir wing_ui.SETTINGS) : distincte de #shcutsEtat, qui est
+         entièrement réécrite par shcutsRafraichir() (appelée seulement au
+         chargement / après un clic, PAS à chaque poll). Tenue à jour par
+         majShcutsHorodate() (ui/parametres.js), appelée à CHAQUE poll
+         (400 ms, /api/status) — donc « il y a X » avance vraiment. -->
+    <div class="muted" id="shcutsHorodate" style="font-size:12px;margin-top:2px"></div>
+    <!-- ⚠️ TOUJOURS OUVERT, pas de dépliant : ces raccourcis sont envoyés à MA3
+         comme les autres. Les replier reviendrait à modifier la console depuis
+         un réglage qu'on ne voit pas. -->
+    <div style="margin-top:16px">
+      <h2 style="margin-bottom:6px"><span id="titreAutresRac" data-i18n="ui.touches.rac.autres_titre">Autres raccourcis</span></h2>
+      <div class="muted" style="font-size:12.5px;margin-bottom:10px" data-i18n-html="ui.touches.rac.autres_txt">
+        Ces touches existent dans MA3 mais <b>aucun bouton de ta wing</b> ne les
+        utilise — chaque exemplaire est différent, et une touche absente chez toi
+        peut exister ailleurs. Elles sont quand même <b>envoyées à MA3</b>.
+      </div>
+        <div id="consoleKeys" style="margin-top:12px; display:grid;
+             grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:8px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FADERS ═══ -->
+<section id="tab-faders">
+  <div class="intro" data-i18n-html="ui.faders.intro">
+    <span class="t">🎚️ Faders — vers les masters MA3</span>
+    Choisis pour chaque fader physique le <b>type</b> à piloter — calqué sur la
+    liste <b>Select Function</b> que MA3 propose pour la propriété Fader d'un
+    executor (Menu Executor → Fader). <b>Le détail des types est listé plus
+    bas</b>, avec la commande exactement envoyée.<br>
+    <b style="color:var(--accent)">⚠️ Le type choisi ici DOIT correspondre à la fonction
+    réellement réglée sur cet executor dans MA3</b> (Menu Executor → Fader →
+    Select Function, ou <code>Set Page X.N Property "Fader" &lt;Fonction&gt;</code>).
+    L'OSC ne voit pas ce que tu as configuré côté MA3 — c'est la commande qu'on
+    envoie qui décide, donc les deux réglages doivent être les mêmes.<br>
+    Astuce : active l'apprentissage et bouge un fader pour repérer son n° d'octet.
+  </div>
+  <div class="card">
+    <h2><span data-i18n="ui.faders.grille.titre">Faders → Masters MA3</span> <span class="muted" data-i18n="ui.faders.grille.titre_hint" style="text-transform:none">(active le mode apprentissage et bouge un fader pour l'identifier)</span></h2>
+    <div class="toolbar" style="margin-bottom:12px">
+      <span class="muted" data-i18n="ui.faders.rang.label">Remplir une rangée : à partir du fader</span>
+      <input type="number" id="rangDepuis" class="small" min="1" value="3" style="width:56px">
+      <span class="muted" data-i18n="ui.faders.rang.executors">→ executors</span>
+      <input type="number" id="rangBase" class="small" min="1" value="201" style="width:70px">
+      <span class="muted" data-i18n="ui.faders.rang.suite">et à la suite</span>
+      <button class="btn" onclick="remplirRangee()" data-i18n="ui.faders.rang.appliquer">Appliquer</button>
+      <span class="muted" id="rangMsg"></span>
+    </div>
+    <details class="help" id="hRangee"><summary data-i18n="ui.faders.hrangee.summary">Comment ça marche, et pourquoi la page suit toute seule</summary>
+    <div class="hbody" data-i18n-html="ui.faders.hrangee.body">
+      Dans grandMA3, <b>toutes les pages ont la même disposition</b> : une
+      rangée 101→110, une autre 201→210, etc. Et un numéro d'executor est
+      toujours <b>relatif à la page courante</b> — <code>Executor 206</code>
+      désigne le 206 de la page affichée.
+      <br><br>
+      Conséquence : tu renseignes la rangée <b>une seule fois</b>, et changer
+      de page suit tout seul. Rien à retoucher.
+      <br><br>
+      L'<b>étiquette</b> à gauche de chaque fader est là pour coller à la
+      sérigraphie de ta wing (<i>Master, XFade, 1, 2…</i>). Elle ne change rien
+      à ce qui est envoyé : c'est pour t'y retrouver, les command wings MA2
+      n'ayant pas toutes le même nombre de faders ni la même disposition.
+    </div></details>
+    <div class="fader-grid" id="faderGrid"></div>
+  </div>
+
+  <div class="card">
+    <h2><span data-i18n="ui.faders.types.titre">Types de fader disponibles</span>
+      <span class="muted" id="ffSrc" style="text-transform:none"></span></h2>
+    <div id="ffList"></div>
+    <div class="muted" id="ffNote" style="margin-top:10px;font-size:11.5px"></div>
+  </div>
+</section>
+
+<!-- ═══ ENCODEURS ═══ -->
+<section id="tab-encodeurs">
+  <div class="intro" data-i18n-html="ui.encodeurs.intro">
+    <span class="t">🎡 Encodeurs — les 4 roues</span>
+    Chaque roue contrôle un attribut des fixtures sélectionnées dans MA3
+    (Dimmer, Pan, Tilt, couleur…). Un <b>clic sur une roue</b> réassigne les 4
+    roues d'un coup (comme un groupe d'attributs) ; un <b>double-clic</b> en
+    active un second jeu — 8 groupes au total, configurés ici de la même
+    façon.
+  </div>
+  <div class="card">
+    <!-- La case « suivre l'Encoder Bar », retirée une fois (elle ne basculait
+         rien), est RÉINTRODUITE : cette fois elle pilote réellement — voir
+         enc_attr_selon_ma3()
+         dans wing_faders.py. -->
+    <div class="reglage">
+      <label><input type="checkbox" id="suivreEncMa3" onchange="saveSuivreEncMa3()"> <span data-i18n="ui.encodeurs.regl.suivre_enc">Suivre l'Encoder Bar de MA3 (les roues reflètent le 1ᵉʳ projecteur sélectionné)</span></label>
+      <button class="aide" onclick="aide('suivreEncMa3')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+    </div>
+    <div class="muted" style="margin-bottom:6px">
+      <span data-i18n="ui.encodeurs.ma3_montre">🎡 Ce que MA3 montre sous ses roues.</span>
+      <span class="muted" data-i18n="ui.encodeurs.ma3_montre_plugin">Nécessite le plugin MA3.</span>
+    </div>
+    <div id="encMa3Etat" class="muted" style="margin:6px 0"></div>
+    <h2><span data-i18n="ui.encodeurs.groupes.titre">Groupes d'attributs</span> <span class="muted" data-i18n="ui.encodeurs.groupes.titre_hint" style="text-transform:none">(clic roue N → groupe N, double-clic roue N → groupe N+4)</span></h2>
+    <details class="help warn" id="hEncAttr">
+      <summary data-i18n="ui.encodeurs.hattr.summary">Une roue ne fait rien ? C'est le nom de l'attribut</summary>
+      <div class="hbody" data-i18n-html="ui.encodeurs.hattr.body">
+        Le nom à écrire ici est le nom <b>interne</b> de l'attribut MA3, et
+        <b>pas le libellé affiché sur l'Encoder Bar</b>. Les deux se ressemblent
+        assez pour tromper :
+        <ul style="margin:8px 0 8px 18px">
+          <li>Encoder Bar « Focus » → écrire <b>Focus1</b></li>
+          <li>Encoder Bar « Sh1 » → écrire <b>Shutter1</b></li>
+          <li>Encoder Bar « Dim » → écrire <b>Dimmer</b></li>
+          <li>Encoder Bar « P » / « T » → écrire <b>Pan</b> / <b>Tilt</b></li>
+        </ul>
+        Un nom inexistant <b>échoue en silence</b> : Wing Bridge envoie la
+        commande sans erreur, et c'est MA3 qui refuse — sur <i>sa</i> ligne de
+        commande, avec <b>illegal object</b>. Rien n'apparaît dans le journal de
+        l'app. Si une roue semble morte, regarde la ligne de commande de MA3.
+        <br><br>
+        Tu n'as pas à les deviner : <b>la liste complète est juste en dessous</b>,
+        et les cases proposent les noms au fur et à mesure que tu tapes.
+      </div>
+    </details>
+    <div id="encGroups"></div>
+    <div class="toolbar" style="margin-top:14px">
+      <label class="muted"><span data-i18n="ui.encodeurs.groupe_demarrage">Groupe au démarrage :</span>
+        <select id="encDefault">
+          <option value="0" data-i18n="ui.encodeurs.groupe.1">Groupe 1</option><option value="1" data-i18n="ui.encodeurs.groupe.2">Groupe 2</option>
+          <option value="2" data-i18n="ui.encodeurs.groupe.3">Groupe 3</option><option value="3" data-i18n="ui.encodeurs.groupe.4">Groupe 4</option>
+        </select>
+      </label>
+      <label class="muted"><span data-i18n="ui.encodeurs.pas_par_tick">Pas par tick :</span>
+        <input type="number" id="encStep" class="small" step="0.5" min="0.5">
+      </label>
+      <!-- ⏹ Bouton « Enregistrer » RETIRÉ. Il portait le même mot
+           que celui de l'en-tête, qui enregistre le PROFIL : on éditait une
+           roue, on cliquait celui de l'en-tête, et la modification était perdue
+           sans un mot. Les réglages s'appliquent maintenant à la saisie, comme
+           dans l'onglet Faders. -->
+      <span class="muted" style="font-size:12.5px" data-i18n-html="ui.encodeurs.modifs_aussitot">Les modifications
+        s'appliquent aussitôt — <b>Enregistrer</b> (en-tête) les grave dans le
+        profil.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span data-i18n="ui.encodeurs.attrs.titre">Attributs reconnus par MA3</span>
+      <span class="muted" id="attrSrc" style="text-transform:none"></span></h2>
+    <div class="toolbar" style="margin-bottom:10px">
+      <input type="text" id="attrFind" placeholder="Filtrer (ex. gobo, color, blade…)"
+             oninput="renderAttrs()" style="flex:1;min-width:180px" data-i18n-placeholder="ui.encodeurs.attr_find.placeholder">
+      <span class="muted" id="attrCount"></span>
+    </div>
+    <div class="muted" id="attrHint" style="margin-bottom:8px;font-size:12px" data-i18n="ui.encodeurs.attr_hint">
+      Clique un nom pour le placer dans la case de roue sélectionnée.
+    </div>
+    <div id="attrList"></div>
+    <div class="muted" id="attrPath" style="margin-top:10px;font-size:11.5px"></div>
+  </div>
+
+  <!-- Autocomplétion des cases de roue. Rempli par loadAttrs() ; déclaré ici
+       parce que les <input list="attrOptions"> le référencent par son id. -->
+  <datalist id="attrOptions"></datalist>
+  <!-- Mots-clés de commande MA3, lus dans le manuel installé. Même rôle que
+       attrOptions pour les attributs : aider la saisie et éviter les fautes
+       de casse, qui échouent en SILENCE côté MA3. -->
+  <datalist id="cmdOptions"></datalist>
+</section>
+
+<!-- ═══ PROFILS ═══ -->
+<section id="tab-profils">
+  <div class="intro" data-i18n-html="ui.profils.intro">
+    <span class="t">💾 Profils — sauvegarder tes réglages</span>
+    Un profil regroupe tous tes mappings (touches, faders, roues, LEDs,
+    raccourcis console). Sauvegarde-le sous un nom, et si tu as plusieurs wings,
+    charge le bon profil pour chacune.
+  </div>
+  <!-- ⏹ Les encarts « 🛟 Config sûre » et « Profil courant » ont été RETIRÉS :
+     ils occupaient un demi-écran pour redire ce que l'en-tête
+     montre déjà en permanence (profil actif, 💾 Enregistrer, 🛟 Config sûre).
+
+     ⚠️ Les DEUX actions qu'ils portaient seuls ont été relogées dans la barre
+     ci-dessous — pas supprimées : « Enregistrer sous… » (créer un profil
+     nommé) et « ★ Figer comme config sûre ». Sans elles, on ne pourrait plus
+     créer de profil ni redéfinir son filet de sécurité. -->
+<div class="card">
+    <h2 data-i18n="ui.profils.titre">Profils sauvegardés</h2>
+    <div class="toolbar" style="margin-bottom:10px">
+      <!-- ⚠️ NE PAS l'appeler « Enregistrer sous… » : le mot « Enregistrer »
+           appartient au bouton de l'en-tête, qui grave dans le profil ACTIF.
+           Deux boutons portant le même mot, c'est un piège déjà vécu —
+           l'utilisateur clique le mauvais et perd sa saisie. Le contrôle
+           test_reglages_sappliquent refuse tout homonyme. -->
+      <button class="btn primary" onclick="enregistrerSous()"
+              title="Crée un nouveau profil nommé à partir des réglages actuels" data-i18n="ui.profils.bouton.creer" data-i18n-title="ui.profils.bouton.creer_tip">＋ Créer un profil…</button>
+      <button class="btn" onclick="importProfile()"
+              title="Va chercher un profil ailleurs : AirDrop, clé USB, Téléchargements" data-i18n="ui.profils.bouton.importer" data-i18n-title="ui.profils.bouton.importer_tip">📥 Importer…</button>
+      <button class="btn" onclick="setReference()"
+              title="Écrase ton filet de sécurité par les réglages actuels — à ne faire que si tout fonctionne" data-i18n="ui.profils.bouton.figer" data-i18n-title="ui.profils.bouton.figer_tip">★ Figer comme config sûre</button>
+      <button class="btn" onclick="newProfile()"
+              title="Repart des défauts d'usine (rare, gros pépin)" data-i18n="ui.profils.bouton.defauts" data-i18n-title="ui.profils.bouton.defauts_tip">Défauts d'usine</button>
+    </div>
+    <div class="muted" style="font-size:12.5px;margin-bottom:12px">
+      <span data-i18n-html="ui.profils.etoile_txt">L'étoile <b>★</b> désigne le profil <b>chargé au démarrage</b> de l'app —
+      c'est celui sur lequel la wing repart. Dernière config sûre :</span>
+      <b id="refWhen">—</b>
+    </div>
+    <div class="profile-list" id="profList"><div class="muted" data-i18n="ui.profils.aucun">Aucun profil.</div></div>
+  </div>
+</section>
+
+<!-- ═══ DMX ═══ -->
+<!-- ═══ PARAMÈTRES ═══
+     Regroupe ce qu'on règle UNE FOIS : sortie DMX, éclairage des boutons,
+     identification USB, cible OSC. Fusion des anciens onglets DMX, LEDs et
+     Détection — la barre passe de 8 à 6 entrées.
+
+     ⚠️ NE PAS y déplacer ce qui décrit la DISPOSITION de la wing (touches,
+     faders, roues) : ça se règle par exemplaire de wing et ça reste visible.
+     Voir le principe en tête de GUIDE_PROJET.md. -->
+<section id="tab-parametres">
+  <div class="intro" data-i18n-html="ui.param.intro">
+    <span class="t">⚙️ Paramètres</span>
+    Ce qu'on règle une fois, à la mise en route, et qu'on ne retouche plus. La
+    disposition de ta wing (touches, faders, roues) se règle dans ses propres
+    onglets.
+  </div>
+
+  <!-- ═══ 1. grandMA3 : cible OSC + plugin (sonde Lua) ═══
+       Les DEUX canaux à mettre en place pour parler à MA3 :
+       • OSC (sortant) — les commandes de la wing partent vers MA3 ;
+       • plugin Lua    — le SEUL retour de MA3 (LED des executors, page courante,
+         rattrapage des faders). L'OSC ne va que dans un sens.
+       Le plugin est REQUIS à l'installation, au même titre que le firmware :
+       sans lui, Wing Bridge envoie à l'aveugle. majParametresGma3()
+       (ui/parametres.js) reflète l'état live depuis /api/status
+       (osc.reachable, sonde.actif / sonde.executors) et déplie la procédure
+       d'installation tant que la sonde ne voit pas le plugin.
+
+       ⚠️ Les endpoints d'écoute OSC (diagnostic de boucle) RESTENT même sans
+       panneau : POST /api/osc/listen {"port": N} démarre, {"port": 0} arrête,
+       GET /api/status → osc.in.messages. Ne coûte rien tant que le port vaut 0.
+       Mode d'emploi : docs/GRANDMA3_SYNC.md. -->
+  <div class="card" id="gma3Card">
+    <h2 data-i18n="ui.param.gma3.titre">🎛️ grandMA3</h2>
+    <div class="toolbar">
+      <span class="muted" data-i18n="ui.param.gma3.cible_osc">Cible OSC →</span>
+      <input type="text" id="oscIp" placeholder="127.0.0.1" spellcheck="false"
+             style="width:130px;text-align:center" title="IP ou nom de la machine qui fait tourner grandMA3" data-i18n-title="ui.param.gma3.osc_ip_tip">
+      <span class="muted">:</span>
+      <input type="text" id="oscPort" placeholder="8000" spellcheck="false"
+             style="width:66px;text-align:center" title="Port OSC de MA3 (Menu → In &amp; Out → OSC)" data-i18n-title="ui.param.gma3.osc_port_tip">
+      <button class="btn" onclick="saveOscTarget()" data-i18n="ui.param.gma3.osc_appliquer">Appliquer</button>
+      <span class="pill"><span class="dot" id="gma3OscDot"></span><span id="gma3OscTxt">…</span></span>
+      <span class="muted" id="oscMsg" style="font-size:12.5px"></span>
+    </div>
+    <div class="toolbar" style="margin-top:8px">
+      <span class="muted" data-i18n="ui.param.gma3.plugin_label">Plugin (sonde Lua) →</span>
+      <span class="pill"><span class="dot" id="gma3SondeDot"></span><span id="gma3SondeTxt">…</span></span>
+    </div>
+
+    <!-- Emplacement (slot) du pool Plugins de MA3 pour l'install automatique.
+         SETTINGS["plugin_slot"] (wing_ui.py), défaut 3 = comportement d'avant
+         ce réglage. Discret : chaque wing/show étant différent, rien ne
+         garantit que le slot 3 soit libre chez tout le monde — voir
+         docs/GRANDMA3_SYNC.md. Même réglage que le champ de l'aiguillage de
+         fin d'assistant firmware (Windows) : les deux lisent/écrivent
+         SETTINGS["plugin_slot"], synchronisés via /api/status. -->
+    <div class="toolbar" style="margin-top:8px">
+      <span class="muted" data-i18n="ui.param.gma3.plugin_slot_label">Emplacement du plugin →</span>
+      <input type="number" id="pluginSlotInput" min="1" max="9999"
+             style="width:70px;text-align:center" placeholder="3"
+             title="Emplacement (slot) du pool Plugins de MA3 où l'installation automatique importe l'amorce. 3 par défaut — change-le si ce slot est déjà pris par un autre plugin." data-i18n-title="ui.param.gma3.plugin_slot_tip">
+      <button class="btn" onclick="savePluginSlot(document.getElementById('pluginSlotInput').value, 'pluginSlotMsg')" data-i18n="ui.param.gma3.plugin_slot_appliquer">Appliquer</button>
+      <span class="muted" id="pluginSlotMsg" style="font-size:12.5px"></span>
+    </div>
+    <!-- Mesuré en réel le 11/09/2026 (docs/GRANDMA3_SYNC.md, section dédiée) :
+         changer l'emplacement après une install précédente peut laisser
+         l'ANCIEN emplacement muet, sans message d'erreur MA3. Averti ici,
+         pas caché derrière un bloc repliable — cette conséquence-là ne doit pas
+         attendre qu'on aille chercher la procédure manuelle. -->
+    <div class="muted" style="font-size:12px;margin-top:2px" data-i18n="ui.param.gma3.plugin_slot_avertissement">⚠️ Changer l'emplacement après une installation précédente peut laisser l'ancien emplacement muet (plus de réponse, même à une relance) — retire-le à la main dans le pool Plugins de MA3 (clic droit → Delete) si tu n'en as plus besoin.</div>
+
+    <!-- Bouton de relance : visible UNIQUEMENT quand les fichiers du plugin
+         sont posés mais la sonde ne tourne pas (grandMA3 lancé). Piloté par
+         majParametresGma3(). Exécute l'amorce PAR SON NOM (Plugin "WingLoader"),
+         donc indépendant du numéro de slot. -->
+    <div class="toolbar" id="gma3RelancerZone" style="margin-top:8px;display:none">
+      <button class="btn primary" id="gma3RelancerBtn" onclick="pluginRelancer()" data-i18n="ui.param.gma3.relancer">🔁 Relancer le plugin dans grandMA3</button>
+      <span class="muted" id="gma3RelancerMsg" style="font-size:12.5px"></span>
+    </div>
+
+    <!-- L'alerte « plugin non installé » ne vit PAS ici (décision auteur : pas
+         sa place dans le paramétrage) — elle défile dans la barre d'activité en
+         haut (pastille « Sonde MA3 »), et seulement quand grandMA3 est joignable.
+         Ici : juste l'état + la procédure repliée. -->
+    <details class="help" id="gma3PluginDetails" style="margin-top:10px">
+      <summary id="gma3PluginSummary" data-i18n="ui.param.gma3.hplugin.summary">Installer le plugin grandMA3</summary>
+      <!-- ⚠️ PAS de data-i18n-html ici : le slot est interpolé ({slot}) dans
+           le texte, et le passage générique data-i18n-html de appliquerLangue()
+           (ui/i18n.js) copie le catalogue tel quel, SANS interpolation — il
+           écraserait le rendu avec le gabarit brut. Rendu par
+           majPluginProcedureManuelle() (ui/parametres.js) via tHtml(clé,
+           {slot}), appelée à l'init, à chaque poll de Paramètres et à la
+           bascule de langue. Le contenu ci-dessous n'est qu'un repli statique
+           (slot 3, le défaut) affiché avant le premier rendu JS. -->
+      <div class="hbody" id="gma3PluginBody">
+        <b>1. Copier les fichiers</b> sur <b>chaque</b> machine qui fait tourner
+        MA3 (importer un show ne les copie pas) :<br>
+        &nbsp;&nbsp;• <b>macOS</b> — lance <code>plugin_ma3/installer.sh</code> : il
+        copie les fichiers dans
+        <code>~/MALightingTechnology/gma3_library/datapools/plugins/</code> et
+        contrôle la syntaxe Lua au passage.<br>
+        &nbsp;&nbsp;• <b>Windows</b> — copie <code>wingbridge.lua</code>,
+        <code>wingbridge.xml</code>, <code>wingloader.lua</code> et
+        <code>wingloader.xml</code> (dossier <code>plugin_ma3</code>) vers
+        <code>C:\ProgramData\MALightingTechnology\gma3_library\datapools\plugins\</code>.<br>
+        <b>2. Dans grandMA3</b>, une commande après l'autre :<br>
+        &nbsp;&nbsp;<code>Import Plugin Library "wingloader.xml" At 3</code><br>
+        &nbsp;&nbsp;<code>Set Plugin 3.1 Property "Installed" "Yes"</code><br>
+        &nbsp;&nbsp;<code>Plugin 3</code><br>
+        &nbsp;&nbsp;(si MA3 propose <b>Overwrite / Merge / Cancel</b> — slot 3
+        déjà occupé — choisis <b>Overwrite</b>.)<br>
+        <b>3. Enregistre le show</b> : l'emplacement du plugin fait partie du
+        showfile ; sans sauvegarde il disparaît au redémarrage de MA3 (les
+        fichiers sur le disque, eux, restent).<br>
+        <span class="muted">Une fois l'amorce importée, toute nouvelle version de
+        la sonde est prise au prochain <code>Plugin 3</code> — sans re-import ni
+        redémarrage de MA3.</span>
+      </div>
+    </details>
+
+    <details class="help"><summary data-i18n="ui.param.gma3.hactiver.summary">Côté grandMA3 : quoi activer</summary>
+    <div class="hbody" data-i18n-html="ui.param.gma3.hactiver.body">
+      <b>OSC</b> (Menu → In &amp; Out → OSC) : une ligne avec <b>Receive</b> et
+      <b>Receive Command</b> sur <i>Yes</i>, port = celui saisi ci-dessus
+      (<b>8000</b> par défaut ; <b>127.0.0.1</b> quand MA3 tourne sur ce Mac).<br>
+      ⚠️ Menu → Network : le bouton en bas à droite doit être <b>vert</b> —
+      réseau global coupé, aucun socket, OSC compris.
+    </div></details>
+  </div>
+
+  <!-- ═══ 2. Test clavier ═══
+       Envoie une frappe à MA3 sans toucher à la wing — vérifier qu'un raccourci
+       arrive bien. JS : consoleTest (ui/touches.js). Placé juste après grandMA3
+       (décision auteur) : c'est le complément direct de la config MA3. -->
+  <div class="card">
+    <h2 data-i18n="ui.param.test.titre">⌨️ Test clavier</h2>
+    <div class="muted" style="font-size:13px;margin-bottom:10px" data-i18n-html="ui.param.test.txt">
+      Envoie n'importe quelle frappe à MA3 sans toucher à la wing. <b>MA3 doit
+      être au premier plan.</b>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="testKey" placeholder="s, Alt+C, Ctrl+Z, F12…"
+             style="width:210px" onkeydown="if(event.key==='Enter')consoleTest()" data-i18n-placeholder="ui.param.test.placeholder">
+      <button class="btn" onclick="consoleTest()" data-i18n="ui.param.test.envoyer">🧪 Envoyer</button>
+      <button class="aide" onclick="aide('conflitRaccourci')"
+              title="Un bouton déclenche autre chose dans MA3 ?" data-i18n-title="ui.param.test.conflit_tip">?</button>
+    </div>
+  </div>
+
+  <!-- ═══ 3. Sortie DMX — les 2 XLR de la wing ═══
+       grandMA3 émet en sACN / Art-Net → la wing ressort ces univers sur ses XLR
+       A et B. pollDMX() (ui/parametres.js) lit /api/dmx (512 valeurs + compte de
+       canaux non nuls par univers) et n'alimente la grille des 512 que quand
+       elle est ouverte. -->
+  <div class="card" id="dmxCard">
+    <h2 data-i18n="ui.param.dmx.titre">🔌 Sortie DMX</h2>
+    <div class="toolbar">
+      <button class="btn big green" id="dmxBtn" onclick="toggleDMX()" data-i18n="ui.param.dmx.activer">▶ Activer la sortie DMX</button>
+      <label class="muted"><span data-i18n="ui.param.dmx.xlr_a">XLR A ← univers</span>
+        <input type="number" id="dmxUni" class="small" min="1" value="1" onchange="setDmxUni()">
+      </label>
+      <label class="muted"><span data-i18n="ui.param.dmx.xlr_b">XLR B ← univers</span>
+        <input type="number" id="dmxUni2" class="small" min="1" value="2" onchange="setDmxUni()">
+      </label>
+    </div>
+    <div class="reglage" style="margin-top:8px">
+      <label><input type="checkbox" id="dmxLocal" onchange="setDmxLocal()"> <span data-i18n="ui.param.dmx.local">N'accepter le DMX réseau que de cette machine (MA3 doit émettre sur 127.0.0.1)</span></label>
+    </div>
+    <div class="toolbar" style="margin-top:8px">
+      <span class="pill"><span class="dot" id="dmxDot"></span><span id="dmxSrc" data-i18n="ui.param.dmx.aucun_signal">aucun signal</span></span>
+      <button class="btn" id="dmxVoirBtn" onclick="dmxToutVoir()" data-i18n="ui.param.dmx.voir">Voir les 512 canaux ▾</button>
+    </div>
+    <div id="dmxView" style="display:none;margin-top:12px"></div>
+    <details class="help" id="hDmx"><summary data-i18n="ui.param.dmx.hdmx.summary">Comment alimenter la sortie DMX</summary>
+    <div class="hbody" data-i18n-html="ui.param.dmx.hdmx.body">
+      grandMA3 émet en sACN ou Art-Net → la wing ressort l'univers sur son XLR DMX.<br>
+      Dans MA3 : <b>Menu → In &amp; Out → DMX Protocols</b> → active sACN (ou Art-Net),
+      l'univers voulu en sortie.
+    </div></details>
+  </div>
+
+  <!-- ═══ 4. LEDs des boutons ═══
+       Chenillard (toggleVegas / vegasBtn) : test visuel de toutes les LED.
+       Illumination à l'appui (ledFeedback) : allume la touche pressée. La carte
+       bouton → LED est intégrée (retrouvée sur capture) — plus rien à
+       cartographier à la main.
+       ⛔ NE PAS réintroduire un curseur « niveau d'éclairage » : voir le
+       garde-fou dans ui/parametres.js — il allumait les 119 slots à fond et la
+       wing décrochait du bus. -->
+  <div class="card" id="ledCard">
+    <h2 data-i18n="ui.param.led.titre">💡 LEDs des boutons</h2>
+    <div class="toolbar">
+      <button class="btn big primary" id="vegasBtn" onclick="toggleVegas()" data-i18n="ui.param.led.chenillard">🎰 Lancer le chenillard</button>
+    </div>
+    <div class="toolbar" style="margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="ledFeedback" checked onchange="setLedFeedback()"
+               style="width:18px;height:18px">
+        <span data-i18n="ui.param.led.feedback">Allumer une touche quand on appuie dessus</span>
+      </label>
+    </div>
+    <div class="toolbar" style="margin-top:10px">
+      <button class="btn" onclick="ledRestore()" data-i18n="ui.param.led.restore">Remettre les LEDs au repos</button>
+    </div>
+    <details class="help" id="hLed"><summary data-i18n="ui.param.led.hled.summary">Cartographier une touche à sa LED</summary>
+    <div class="hbody" data-i18n-html="ui.param.led.hled.body">
+      Les <b>boutons executor</b> s'illuminent automatiquement. Pour les autres
+      touches, la carte bouton → LED est <b>déjà intégrée</b> (retrouvée sur
+      capture) : il n'y a plus rien à régler à la main.
+    </div></details>
+  </div>
+
+  <!-- ═══ 5. Détection USB ═══
+       Scanne l'USB, identifie les command wings MA2 compatibles et les
+       candidats, propose un test de handshake. JS : scanUSB (ui/parametres.js). -->
+  <div class="card" id="scanCard">
+    <h2 data-i18n="ui.param.scan.titre">🔍 Détection USB</h2>
+    <div class="toolbar">
+      <button class="btn primary" onclick="scanUSB()" data-i18n="ui.param.scan.bouton">🔍 Scanner l'USB</button>
+    </div>
+    <div id="scanResult" class="muted" style="margin-top:12px" data-i18n="ui.param.scan.result_defaut">Lance un scan pour voir les périphériques.</div>
+    <details class="help"><summary data-i18n="ui.param.scan.hlire.summary">Comment lire le résultat</summary>
+    <div class="hbody" data-i18n-html="ui.param.scan.hlire.body">
+      • <b style="color:var(--green)">Supportée</b> : VID:PID connu (0x03EB:0x160B) — fonctionne direct.<br>
+      • <b style="color:var(--accent)">Candidate</b> : puce Atmel ou endpoints identiques à la wing connue —
+      <i>Tester le handshake</i> pour vérifier qu'elle parle le même protocole.<br>
+      • Un appareil qui répond au handshake comme la wing connue → très probablement le même PCB → compatible.<br>
+      • Un VID:PID différent qui ne répond pas → puce différente : il faut capturer
+      son protocole USB pour l'ajouter. Copie le rapport et garde-le.
+    </div></details>
+  </div>
+
+  <!-- ═══ 6. Firmware de la wing ═══
+       Le firmware applicatif de la wing appartient à MA Lighting : il n'est PAS
+       livré avec ce projet. Voie PRINCIPALE (Windows) : capture intégrée —
+       Wing Bridge installe temporairement USBPcap, lit le firmware pendant que
+       grandMA2 onPC le pousse à la wing, puis retire USBPcap. Repli manuel
+       (toutes plateformes, ou si la capture intégrée échoue) : importer une
+       capture Wireshark (.pcapng) ou un .bin déjà en main. Une fois en cache,
+       la wing devient connectable. Voir docs/HARDWARE.md et docs/WINDOWS.md.
+       JS : ui/parametres.js (fwImportCapture/fwImportBin/fwExport/majFirmware/
+       majCapture). -->
+  <div class="card" id="firmwareCard">
+    <h2 data-i18n="ui.param.fw.titre">🧩 Firmware de la wing</h2>
+    <div class="muted" style="font-size:13px;margin-bottom:10px;line-height:1.6">
+      <span data-i18n-html="ui.param.fw.txt">La wing attend qu'on lui pousse le firmware de <b>grandMA2 onPC</b> à chaque
+      branchement. Ce firmware appartient à MA Lighting et n'est pas fourni ici :
+      <b>récupère ta propre copie</b>, une seule fois — elle est mise en cache et
+      resservie à chaque branchement. <b>La récupérer directement depuis cette
+      app n'est possible que sur Windows</b> — sur Mac, importe une capture
+      (.pcapng) ou un fichier .bin obtenu ailleurs.</span>
+      <span id="firmwareEtat" style="font-weight:600"></span>
+    </div>
+
+    <!-- Capture intégrée (Windows x64 uniquement, PAS Windows ARM) — masquée
+         par majCapture() si s.capture est null (hors Windows x64, module
+         absent du build, ou hôte ARM : USBPcap et grandMA2 onPC n'existent
+         qu'en x64 — cf. wing_firmware_capture.capture_supportee). -->
+    <div id="fwCaptureBloc" style="display:none;margin-bottom:14px">
+      <div class="toolbar">
+        <button class="btn primary" id="fwCaptureBtn" onclick="fwCaptureAmorcer()" data-i18n="ui.param.fw.capturer">📡 Capturer depuis grandMA2 onPC</button>
+      </div>
+      <!-- Encart de confirmation — avant toute installation, l'utilisateur
+           doit voir explicitement ce qui va se passer. -->
+      <div id="fwCaptureConfirm" class="muted" style="display:none;font-size:13px;
+           line-height:1.6;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px">
+        <span data-i18n-html="ui.param.fw.confirm_txt"><b>Le firmware de la wing appartient à MA Lighting</b> — Wing Bridge ne
+        peut pas le fournir. La seule façon de l'obtenir : <b>écouter grandMA2
+        onPC</b> pendant qu'il l'envoie lui-même à la wing. Il te faut donc
+        <b>grandMA2 onPC installé et lançable</b> sur ce PC (juste pour cette
+        opération — ensuite tu n'en as plus besoin). <b>Windows x64
+        uniquement</b> — pas Windows ARM : USBPcap et grandMA2 onPC n'existent
+        qu'en x64.
+        <br><br>
+        Pour ça, Wing Bridge installe <b>temporairement</b> USBPcap (un
+        composant de capture USB open-source), enregistre <b>une seule fois</b>
+        le firmware, puis le <b>désinstalle</b>. Une invite Windows demandera
+        la permission.
+        <br><br>
+        <b>Tu seras guidé pas à pas (7 étapes)</b>, chacune se débloque toute
+        seule : lancer grandMA2 onPC → débrancher la wing → (installation) →
+        brancher la wing → <b>fermer grandMA2 onPC</b> → débrancher la wing
+        (retrait de USBPcap) → rebrancher la wing → Wing Bridge reprend la
+        main. <b>Compte 2 à 4 min</b>, et pendant ce temps la wing va
+        s'éteindre/se rallumer plusieurs fois — c'est normal, <b>ne branche /
+        débranche rien tant que l'assistant ne te le demande pas</b>.</span>
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn primary" onclick="fwCaptureContinuer()" data-i18n="ui.param.fw.confirm.continuer">Continuer</button>
+          <button class="btn" onclick="fwCaptureAnnuler()" data-i18n="ui.param.fw.confirm.annuler">Annuler</button>
+        </div>
+      </div>
+      <!-- Assistant pas à pas pendant la capture (~2 à 4 min, installation
+           USBPcap comprise). Barre d'étapes + titre + consigne courante :
+           tout est alimenté par majCapture() depuis /api/status
+           (s.capture.phase / phase_titre / etape). -->
+      <div id="fwCaptureProgress" style="display:none;font-size:13px;margin-top:8px">
+        <!-- Consigne n°1, en gros : l'opération dure 2-4 min et la wing
+             s'éteint/rallume plusieurs fois (ré-énumérations + nettoyage
+             USBPcap). L'envie de débrancher pendant ces phases a été signalée
+             — ce qui casse tout. Il y a de VRAIES étapes de
+             branchement/débranchement (4, 6) : la règle est « seulement quand
+             c'est demandé ». -->
+        <div style="font-weight:800;font-size:14px;padding:10px 12px;border-radius:8px;
+             margin-bottom:8px;background:var(--accent);color:#fff;text-align:center" data-i18n-html="ui.param.fw.progress.avertissement">
+          ⚠️ Ne branche / débranche la wing QUE quand l'étape ci-dessous te le demande.<br>
+          <span style="font-weight:600">Entre-temps elle va s'éteindre et se rallumer plusieurs fois — c'est normal, laisse faire (2 à 4 min).</span>
+        </div>
+        <div id="fwCaptureStepbar" style="display:flex;gap:4px;margin-bottom:8px"></div>
+        <div id="fwCaptureTitre" style="font-weight:700;margin-bottom:4px;font-size:14px"></div>
+        <div id="fwCaptureEtape"
+             style="padding:8px 10px;border-radius:8px;background:var(--card2);font-weight:600"></div>
+        <div class="muted" style="margin-top:6px" data-i18n="ui.param.fw.progress.note">
+          7 étapes, chacune se débloque toute seule dès que l'action est faite —
+          rien à cliquer. Les étapes 5 (fermer grandMA2 onPC), 6 (débrancher la
+          wing, le temps du retrait de USBPcap) et 7 (rebrancher) sont
+          indispensables : sans elles Wing Bridge ne peut pas reprendre la wing
+          et le composant de capture resterait installé.
+        </div>
+        <!-- Annuler la démarche : dispo TOUT DU LONG. Ne tue rien de force —
+             pose un drapeau ; si USBPcap est déjà installé, la boucle le retire
+             avant de rendre la main (wing_firmware_capture.annuler_capture). -->
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn" id="fwCaptureAnnulerBtn" onclick="fwCaptureAnnulerDemarche()"
+                  style="font-size:12px;padding:4px 10px" data-i18n="ui.param.fw.progress.annuler_demarche">⏹ Annuler la démarche</button>
+          <span class="muted" id="fwCaptureAnnulerMsg" style="font-size:12px"></span>
+        </div>
+      </div>
+      <div id="fwCaptureResultat" style="display:none;font-size:13px;margin-top:8px"></div>
+      <!-- Aiguillage de fin de wizard : où Wing Bridge sera-t-il utilisé ?
+           Affiché par majCapture() à la bascule succès, AVANT l'invitation
+           « vérifie ta wing » ci-dessous. Deux branches (fwAiguillage) :
+             • « Sur ce PC Windows » → ferme l'aiguillage, RIEN d'autre : le
+               fil standard A→E (#oscEtape / #pluginEtape, piloté par
+               majParametresGma3()) prend le relais tout seul au poll suivant.
+               🐛 Avant (19/09/2026, test réel) : cette branche ouvrait son
+               PROPRE panneau « Installer le plugin » — dupliqué de l'Étape B
+               (même texte, même appel /api/plugin/install), hors de la barre
+               A→E, et SANS attendre que l'étape A (OSC) soit confirmée prête
+               (l'Étape B officielle, elle, attend ça — sinon l'install peut
+               échouer en silence, sonde muette). Retiré : un seul chemin
+               d'installation, celui qui respecte l'ordre A→B.
+             • « Sur mon Mac »       → exporter le .bin, l'installer depuis le Mac
+           Le choix « mac » traité, fwAiguillageFini() dévoile #fwCaptureSuite. -->
+      <div id="fwCaptureAiguillage" style="display:none;font-size:13px;margin-top:10px;
+           padding:12px 14px;border:1px solid var(--accent);border-radius:8px;line-height:1.6">
+        <b data-i18n="ui.param.fw.aiguillage.titre">Firmware récupéré ✓ — dernière question : où utiliseras-tu Wing Bridge ?</b>
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn primary" onclick="fwAiguillage('ici')" data-i18n="ui.param.fw.aiguillage.ici">Sur ce PC Windows</button>
+          <button class="btn" onclick="fwAiguillage('mac')" data-i18n="ui.param.fw.aiguillage.mac">Sur mon Mac</button>
+        </div>
+        <!-- Branche « mac » : exporter le firmware -->
+        <div id="fwAiguillageMac" style="display:none;margin-top:10px">
+          <span data-i18n-html="ui.param.fw.aiguillage.mac_txt">Le firmware est prêt. Clique <b>💾 Exporter le firmware</b>, copie le
+          <code>.bin</code> sur ton Mac, puis dans Wing Bridge sur Mac :
+          importe-le (« 📄 Importer un firmware (.bin) ») et installe le plugin
+          depuis là. Pas d'installation de plugin ici.</span>
+          <div class="toolbar" style="margin-top:8px">
+            <button class="btn primary" onclick="fwExport()" data-i18n="ui.param.fw.exporter">💾 Exporter le firmware</button>
+            <button class="btn" onclick="fwAiguillageFini()" data-i18n="ui.param.fw.aiguillage.termine">Terminé</button>
+          </div>
+        </div>
+      </div>
+      <!-- #fwCaptureSuite a DÉMÉNAGÉ hors de #fwCaptureBloc (fin de carte,
+           après #pluginEtape) : ce bloc entier est masqué sur toute machine où
+           la capture intégrée n'existe pas (Mac, Windows ARM — cf.
+           wing_firmware_capture.capture_supportee), donc CE QUI Y RESTAIT
+           NE S'AFFICHAIT JAMAIS hors Windows x64. L'invitation « vérifie ta
+           wing » doit pourtant valoir pour toute la mise en route, pas
+           seulement le fil de capture Windows. -->
+      <!-- Bouton de secours : visible SEULEMENT si un nettoyage automatique a
+           échoué (USBPcap présent ET posé par nous — jamais pour un USBPcap
+           que l'utilisateur avait lui-même installé). -->
+      <div style="margin-top:6px">
+        <button class="btn" id="fwRemoveCaptureBtn" onclick="fwRetirerComposant()"
+                style="display:none;font-size:12px;padding:4px 10px" title="Un nettoyage automatique a échoué — retirer USBPcap manuellement" data-i18n="ui.param.fw.retirer_composant" data-i18n-title="ui.param.fw.retirer_composant_tip">
+          🧹 Retirer le composant de capture
+        </button>
+      </div>
+    </div>
+
+    <details class="help" id="hFirmware"><summary data-i18n="ui.param.fw.hrepli.summary">Repli manuel (Wireshark) — ou une autre plateforme</summary>
+    <div class="hbody" data-i18n-html="ui.param.fw.hrepli.body">
+      Sur un PC <b>Windows x64</b> : installe Wireshark (il propose USBPcap),
+      lance la capture sur l'interface <b>USBPcapN</b> du hub où sera la wing,
+      branche la wing / ouvre grandMA2 onPC (l'upload dure ~2-3 s), arrête et
+      enregistre en <b>.pcapng</b>. Importe ce fichier ci-dessous : si
+      l'empreinte correspond, c'est bon. Sur Mac (ou toute machine qui n'est
+      pas celle où tu captures) : capture une fois sur un PC Windows via le
+      bouton ci-dessus, « 💾 Exporter le firmware » une fois en cache, copie
+      le <code>.bin</code>, puis « 📄 Importer un firmware (.bin) » ici.
+      Détail : docs/HARDWARE.md.
+    </div></details>
+    <div class="toolbar">
+      <button class="btn" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
+      <button class="btn" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
+      <button class="btn" id="fwExportBtn" onclick="fwExport()" style="display:none" data-i18n="ui.param.fw.export_btn">💾 Exporter le firmware</button>
+      <span class="muted" id="fwMsg" style="font-size:12.5px"></span>
+    </div>
+
+    <!-- Résumé compact une fois le bridge RÉELLEMENT démarré (s.mode ===
+         "bridge") — retour auteur (18/09/2026) : après avoir cliqué
+         « Démarrer le bridge » (étape E), tout le fil A-E restait affiché à
+         l'identique, bouton compris — « la manip reste visible, elle devrait
+         disparaître ». Remplace tout le bloc post-firmware (barre de lettres
+         + #fwCaptureSuite) par cette seule ligne. Recalculé à chaque poll,
+         donc réversible si le bridge s'arrête (majParametresGma3(),
+         ui/parametres.js). -->
+    <div id="miseEnRouteTerminee" style="display:none;margin-top:14px;padding:10px 12px;
+         border:1px solid var(--green);border-radius:8px;color:var(--green);font-size:13px">
+      <span data-i18n="ui.param.fw.termine_txt">✅ Bridge démarré — configuration terminée.</span>
+    </div>
+
+    <!-- Repère de progression de la mise en route (Étapes A → E) — EN LETTRES,
+         pas en chiffres : la capture Windows au-dessus a déjà sa propre barre
+         numérotée (1..7, _fwCaptureStepbar) pour une séquence DIFFÉRENTE et
+         PLUS LONGUE sur PC ; réutiliser des chiffres ici aurait laissé croire
+         à la continuité d'une même série alors que Mac saute direct à cette
+         phase. Cette phase-ci (A-E) est identique sur Mac et sur Windows —
+         seul le chemin AVANT elle diffère. Un seul état par lettre
+         (pending/current/done), recalculé à chaque poll par
+         _mercWizStepbar() (ui/parametres.js) — jamais mémorisé : revenir sur
+         l'assistant après avoir déjà tout fait doit montrer directement les
+         bonnes lettres cochées. -->
+    <div class="toolbar" id="mercWizStepbar" style="display:none;margin-top:14px;flex-wrap:wrap">
+      <span class="pill" id="mercPillA" style="font-size:11.5px;padding:3px 10px" data-i18n-html="ui.param.fw.etape.a"><b>A</b> · OSC</span>
+      <span class="pill" id="mercPillB" style="font-size:11.5px;padding:3px 10px" data-i18n-html="ui.param.fw.etape.b"><b>B</b> · Plugin</span>
+      <span class="pill" id="mercPillC" style="font-size:11.5px;padding:3px 10px" data-i18n-html="ui.param.fw.etape.c"><b>C</b> · Vérifier</span>
+      <span class="pill" id="mercPillD" style="font-size:11.5px;padding:3px 10px" data-i18n-html="ui.param.fw.etape.d"><b>D</b> · Raccourcis</span>
+      <span class="pill" id="mercPillE" style="font-size:11.5px;padding:3px 10px" data-i18n-html="ui.param.fw.etape.e"><b>E</b> · Terminé</span>
+    </div>
+
+    <!-- Étape A : ACTIVER L'OSC dans grandMA3 — entièrement manuel (Wing Bridge ne
+         peut techniquement pas le faire à la place de l'utilisateur). Affichée
+         par majParametresGma3() tant que l'OSC n'est pas détecté prêt
+         (osc.reachable !== "ok") : installer_plugin() (étape B) a besoin que
+         MA3 reçoive déjà l'OSC pour que l'import s'applique (sinon échec
+         silencieux après ~1,4 s : « sonde muette ») — voir
+         docs/GRANDMA3_SYNC.md. C'est pour ça que B reste masquée tant que A
+         n'est pas détectée bonne : les deux ne s'affichent plus ensemble.
+         Vérification LIVE : osc_config_ma3() (sonde, /api/status → osc.ma3) si
+         la sonde est déjà active ; sinon repli honnête sur ma3_reachable()
+         (osc.reachable) — un ✅ partiel qui dit explicitement qu'il n'a pas
+         encore la preuve complète, la sonde n'étant pas encore installée à ce
+         stade (poule-et-œuf : elle vient de l'étape suivante). -->
+    <div id="oscEtape" style="display:none;margin-top:16px;padding:12px 14px;
+         border:1px solid var(--border);border-radius:8px;font-size:13px;line-height:1.6">
+      <div data-i18n-html="ui.param.fw.osc_etape_intro"><b>Étape A — Active l'OSC dans grandMA3 :</b> Menu → In &amp; Out → OSC</div>
+      <!-- Statut live AVANT la liste (déplacé le 18/09/2026, demande auteur) :
+           savoir tout de suite si MA3 est détecté avant de suivre les 3
+           points a plus de sens que de le découvrir après. -->
+      <div class="toolbar" style="margin-top:6px">
+        <span id="oscEtapeEtat" style="font-weight:700"></span>
+      </div>
+      <div data-i18n-html="ui.param.fw.osc_etape_txt"><ol style="margin:6px 0 0 20px;padding:0"><li><b>Interface</b> ≠ <code>&lt;None&gt;</code></li><li><b>Enable Input</b> activé</li><li>Ligne <b>Port</b> = 8000 : <b>Receive</b> et <b>Receive Command</b> = Yes</li></ol></div>
+    </div>
+
+    <!-- Étape B de la mise en route : INSTALLER le plugin grandMA3. Affichée
+         par majParametresGma3() quand le firmware est configuré, l'OSC détecté
+         prêt (étape A validée), les fichiers PAS encore posés. Une fois les
+         fichiers là, c'est la carte grandMA3 (bouton « Relancer le plugin »)
+         qui prend le relais, plus cet encart. -->
+    <div id="pluginEtape" style="display:none;margin-top:16px;padding:12px 14px;
+         border:1px solid var(--border);border-radius:8px;font-size:13px;line-height:1.6">
+      <div data-i18n-html="ui.param.fw.plugin_etape_txt"><b>Étape B — Installe le plugin grandMA3.</b></div>
+      <details class="help" style="margin-top:8px"><summary data-i18n="ui.param.fw.plugin_etape.hpourquoi.summary">Pourquoi installer le plugin</summary>
+      <div class="hbody" data-i18n-html="ui.param.fw.plugin_etape.hpourquoi.body">Sans lui, Wing Bridge envoie l'OSC à l'aveugle — pas de retour LED des executors, pas de rattrapage des faders, pas de conscience de page.</div></details>
+      <div class="muted" style="margin-top:6px" data-i18n-html="ui.param.fw.aiguillage.ici_warn">
+        ⚠️ L'installation <b>enregistrera ton show grandMA3</b> (import du
+        plugin dans le pool, puis SaveShow).
+      </div>
+      <div class="toolbar" style="margin-top:8px">
+        <button class="btn primary" id="pluginInstallBtn" onclick="pluginInstaller()" data-i18n="ui.param.fw.plugin_installer">🧩 Installer automatiquement</button>
+        <span class="muted" id="pluginEtapeMsg" style="font-size:12.5px"></span>
+      </div>
+      <div class="muted" id="pluginEtapeManuel" style="margin-top:6px;font-size:12.5px"></div>
+    </div>
+
+    <!-- Suite de la mise en route, pour TOUTES les plateformes : ce bloc
+         (#fwCaptureSuite) a DÉMÉNAGÉ hors de #fwCaptureBloc, réservé à la
+         capture intégrée Windows x64 — voir le commentaire laissé à son
+         ancien emplacement. Affiché par majParametresGma3() dès que le
+         plugin est POSÉ (s.sonde.present), qu'il tourne déjà ou pas encore,
+         et RECALCULÉ à CHAQUE poll (400 ms) à partir de l'état réel : revenir
+         sur l'assistant après avoir déjà tout fait montre directement les
+         bonnes coches, ça ne repart jamais de zéro. -->
+    <div id="fwCaptureSuite" style="display:none;font-size:13px;margin-top:16px;
+         padding:10px 12px;border:1px solid var(--green);border-radius:8px;line-height:1.6">
+      <!-- Ligne d'état du plugin — voir _pluginStatutLigne() (ui/parametres.js),
+           UNIQUEMENT à l'étape C (#pluginStatutTxtC). Le wizard RECULE à C dès
+           que la sonde tombe (majMiseEnRouteSuite remet C et D à faux avant
+           tout affichage) : c'est le comportement voulu et définitif, donc une
+           ligne d'état + bouton « Relancer » à D ou E ne pourrait jamais
+           s'afficher (constaté en test réel, MutationObserver sur tout le
+           wizard) — ils ont été retirés. Visible EN CONTINU à C (pas seulement
+           à l'échec), sans avoir à chercher le bouton sur la carte grandMA3. -->
+
+      <!-- Étape C : SÉPARÉE de D et E (retour auteur, 18/09/2026 : « je veux
+           que C/D/E soient des étapes séparées, comme A et B, avec un bouton
+           passer à l'étape suivante si besoin »). Contrairement à A→B (gaté
+           sur un signal détectable, oscReady/oscOkFull), rien ne permet de
+           savoir si l'utilisateur a VRAIMENT vérifié sa wing — d'où le bouton
+           manuel etapeCSuivante() (ui/parametres.js), qui pose
+           _etapeCPasseeManuel = true. Ce drapeau est ignoré si les conditions
+           de D/E sont déjà remplies (retour d'une session précédente où tout
+           était déjà fait) : voir le calcul de `cPassee` dans
+           majMiseEnRouteSuite(). -->
+      <div id="etapeCBloc" style="display:none">
+        <div style="margin-bottom:14px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12.5px">
+          <span id="pluginStatutTxtC" style="font-weight:700"></span>
+          <button class="btn" id="wizRelancerBtn" style="display:none;margin-left:8px" onclick="relancerPluginWizard()" data-i18n="ui.param.gma3.relancer">🔁 Relancer le plugin dans grandMA3</button>
+          <span class="muted" id="wizRelancerMsg" style="font-size:11.5px;margin-left:6px"></span>
+        </div>
+        <!-- Refonte du 18/09/2026 (retour auteur : « c'est fouillis ») : avant,
+             un seul bloc « ouvre chaque onglet toi-même » — jugé pénible. La
+             personnalisation touches/faders/encodeurs reste ENTIÈRE (exigence
+             GUIDE_PROJET.md, jamais retirée) : elle est juste maintenant accessible
+             par un chemin guidé (bouton primaire) OU direct (les 3 boutons
+             d'onglet, gardés). Voir configGuideeDemarrer() (ui/parametres.js)
+             et #guideBanniere (fin de <main>). -->
+        <div data-i18n-html="ui.param.fw.suite_txt"><b>Étape C — Personnalise ta wing :</b> Branche-la si ce n'est pas déjà fait. Chaque touche, fader et roue a déjà un réglage par défaut.</div>
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn primary" onclick="configGuideeDemarrer()" data-i18n="ui.param.guide.lancer">🧭 Lancer la configuration guidée</button>
+        </div>
+        <div class="toolbar" style="margin-top:6px">
+          <span class="muted" style="font-size:12px" data-i18n="ui.param.guide.manuel_intro">ou directement :</span>
+          <button class="btn" onclick="allerOnglet('touches')" data-i18n="ui.param.fw.suite.touches">Touches →</button>
+          <button class="btn" onclick="allerOnglet('faders')" data-i18n="ui.param.fw.suite.faders">Faders →</button>
+          <button class="btn" onclick="allerOnglet('encodeurs')" data-i18n="ui.param.fw.suite.encodeurs">Encodeurs →</button>
+        </div>
+        <div class="toolbar" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <button class="btn primary" onclick="etapeCSuivante()" data-i18n="ui.param.guide.etape_suivante">Passer à l'étape suivante →</button>
+        </div>
+      </div>
+
+      <!-- Étape D : ACTIVER + ENVOYER LES RACCOURCIS — après l'install du
+           plugin, avant la fin (docs/KEYBOARD_MAPPING.md). Certaines touches
+           passent par le clavier, pas l'OSC : l'app et MA3 doivent s'accorder
+           sur quelle frappe fait quoi.
+           Sous-étape 1 AJOUTÉE (18/09/2026, décrite par l'auteur d'après son
+           écran) : le bouton clavier 🖮 en bout de ligne de commande MA3 —
+           entièrement manuel, dans MA3 lui-même. Sans lui activé côté
+           console, les raccourcis envoyés par Wing Bridge n'ont rien à quoi
+           s'accrocher. Vrai sur Mac ET Windows : c'est MA3 qui a ce bouton,
+           pas l'OS — pas de garde de plateforme ici.
+           ⚠️ PAS de capture d'écran ici — décision prise : texte + bouton
+           suffisent, une image (qui plus est encodée en base64, alourdissant
+           le HTML) ne doit pas revenir.
+           🔁 Revirement (retour auteur, 18/09/2026) : le bouton n'ouvre PLUS
+           l'onglet Touches pour y désigner #btnShcuts — après le premier essai
+           en vrai, un lien de navigation vers un bouton qui fait la même chose
+           ailleurs restait confus (redondance avec l'étape C). Le bouton
+           ci-dessous EST maintenant le second vrai bouton d'envoi : il appelle
+           shcutsEnvoyerWizard() (ui/parametres.js), un mince emballage autour
+           de shcutsEnvoyer() (ui/touches.js, MÊME appel serveur que le bouton
+           de l'onglet Touches — aucune logique dupliquée), qui désactive juste
+           CE bouton-ci pendant l'envoi. Le résultat se lit ensuite sur
+           #shcutsEtapeEtat au poll suivant (s.shcuts_horodate), sans rien
+           coder de plus : c'est déjà comme ça que cette ligne se met à jour.
+           🐛 Vécu en test réel (18/09/2026) : « ça saute à E quand j'ai fini
+           de configurer touches/faders/roues, je rate l'activation de
+           ShCuts ». Un premier essai a ajouté un bouton de confirmation
+           manuelle « ShCuts activé dans MA3 » — RETIRÉ aussitôt après
+           (même session, retour auteur) : « ça n'a aucun sens, ça n'active
+           pas le bouton dans MA3, et ça laisse croire que c'est fait alors
+           que non ». Un bouton qui ne vérifie rien mais AFFIRME que c'est
+           bon est pire que pas de bouton — GUIDE_PROJET.md, « un bouton qui ment
+           coûte plus cher qu'un bouton absent ». Repli : le texte reste
+           affiché en clair pendant que D est la étape courante (elle ne
+           s'efface qu'une fois les raccourcis RÉELLEMENT envoyés — signal
+           détectable, lui) ; ShCuts reste un point à faire soi-même dans
+           MA3, jamais prétendu vérifié. -->
+      <div id="etapeDRaccourcis" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <!-- Retour auteur (18/09/2026) : en un seul paragraphe, le texte
+             ShCuts + le bouton d'envoi juste en dessous donnaient l'impression
+             que LE BOUTON activait ShCuts. Deux points numérotés distincts —
+             1 dans le texte, 2 collé au bouton — pour que ce soit clairement
+             DEUX gestes séparés (l'un dans MA3, l'autre ici). -->
+        <div data-i18n-html="ui.param.fw.shcuts_etape_txt"><b>Étape D — Active les raccourcis :</b> <ol style="margin:6px 0 0 20px;padding:0"><li>Dans grandMA3 : active <b>ShCuts</b> — bouton clavier à l'extrémité droite de la ligne de commande.</li><li>MA3 doit avoir déjà exporté ses raccourcis une fois (depuis la console elle-même) avant que Wing Bridge puisse en envoyer — sans ce fichier, rien ne part, pour ne pas risquer d'écraser des touches que Wing Bridge ne gère pas.</li></ol></div>
+        <div class="toolbar" style="margin-top:8px">
+          <b>2.</b>
+          <button class="btn primary" id="btnShcutsWizard" onclick="shcutsEnvoyerWizard()" data-i18n="ui.param.fw.shcuts_etape.bouton">⌨ Envoyer les raccourcis vers MA3</button>
+          <span id="shcutsEtapeEtat" style="font-weight:700"></span>
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:6px" data-i18n="ui.param.fw.shcuts_etape.avertissement">⚠️ Certains raccourcis peuvent avoir besoin d'un réglage : la disposition clavier retenue dans MA3 et les fonctions standards du clavier ne correspondent pas forcément à celles de ta wing — vérifiables et modifiables dans l'onglet Touches.</div>
+
+        <!-- Sous-étape 2 AJOUTÉE (18/09/2026) : autoriser l'Accessibilité
+             macOS pour Wing Keyboard — sans elle, les frappes ne partent
+             jamais (CGEvent refusé en silence par macOS). Vérification LIVE,
+             même motif que l'étape OSC (#oscEtapeEtat) : console.trusted,
+             alimenté par core.WS["helper_trusted"] (wing_handler.py,
+             /api/keystrokes, ?trusted=1/0 envoyé par l'assistant clavier lui-
+             même à chaque poll). ABSENTE sous Windows — pas juste verte :
+             SendInput n'y demande aucune permission, l'assistant s'y déclare
+             "trusted" tout seul (wing_keyboard_windows.py) — cette étape n'a
+             donc rien à vérifier ni à faire sur cette plateforme. Le champ
+             console.windows (wing_handler.py) le dit explicitement, plutôt
+             que déduire une absence d'action d'un simple "toujours vert".
+             Peuplé/affiché par majMiseEnRouteSuite() (ui/parametres.js). -->
+        <div id="accessEtapeMac" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <span data-i18n="ui.param.fw.access_etape_txt">Réglages Système → Confidentialité et sécurité → Accessibilité (macOS ≤ 26) ou Contrôle de l'appareil et accès aux données (macOS 27+) → active Wing Keyboard.</span>
+          <div class="toolbar" style="margin-top:8px">
+            <span id="accessEtapeEtat" style="font-weight:700"></span>
+          </div>
+        </div>
+        <!-- « Passer à l'étape suivante » + « Étape précédente », EN BAS À
+             DROITE (retour auteur, 18/09/2026 : positionnement) — pas en
+             tête, pour ne pas rivaliser avec l'action principale (envoyer
+             les raccourcis). Bouton suivant AJOUTÉ (18/09/2026) : D→E était
+             gaté sur shcuts_horodate — persisté sur disque, donc resté vrai
+             depuis un envoi antérieur et sautant D sans jamais l'afficher
+             (3 fois de suite en test réel). Repli sur le MÊME motif neutre
+             que C (etapeDSuivante(), ui/parametres.js) : ne prétend rien
+             vérifier, juste « je passe à la suite ». -->
+        <div class="toolbar" style="margin-top:14px;justify-content:flex-end">
+          <button class="btn" onclick="etapePrecedente('C')" data-i18n="ui.param.guide.etape_precedente">← Étape précédente</button>
+          <button class="btn primary" onclick="etapeDSuivante()" data-i18n="ui.param.guide.etape_suivante">Passer à l'étape suivante →</button>
+        </div>
+      </div>
+
+      <!-- Diagnostic honnête quand TOUT est fait (plugin actif, raccourcis
+           envoyés) sauf la confirmation OSC complète : sans ce bloc, l'étape E
+           reste juste invisible, sans dire pourquoi — exactement le bug
+           « il n'y a pas d'étape » qu'on corrige ailleurs dans ce wizard. Cas
+           réel qui l'a révélé (18/09/2026) : reachable === "ok" (étape A →
+           partiel_ok, assez pour laisser passer à B) parce que MA3 a une ligne
+           OSCData sur le port attendu, MAIS cette ligne n'a que l'ENVOI
+           d'activé (Receive/Receive Command = No) — le plugin tourne quand
+           même (il écrit son état dans un fichier, pas par OSC entrant), donc
+           present/active passent au vert, alors que les COMMANDES de l'app
+           (clic sur un executor, etc.) ne peuvent PAS arriver à MA3. Même
+           diagnostic que osc_etape_ko (_oscConfigOk === false), reformulé avec
+           un renvoi explicite à l'étape A : ici, l'étape A n'est plus à
+           l'écran, donc « vérifie le réglage ci-dessus » n'aurait plus rien
+           au-dessus à désigner. Peuplé/affiché par majMiseEnRouteSuite()
+           (ui/parametres.js). -->
+      <div id="finalBloqueOsc" style="display:none;margin-top:14px;padding-top:12px;
+           border-top:1px solid var(--accent);color:var(--accent);font-size:13px;line-height:1.6">
+        <span data-i18n-html="ui.param.fw.final_bloque_osc">⚠️ Il ne manque que la confirmation OSC (étape A) : grandMA3 n'a aucune ligne avec <b>Receive</b> et <b>Receive Command</b> = Yes sur le port attendu — les commandes de l'app ne peuvent pas encore lui parvenir.</span>
+      </div>
+
+      <!-- Étape E : DÉMARRER LE BRIDGE. SÉPARÉE de C/D (18/09/2026), visible
+           SEULEMENT quand les 3 conditions RÉELLES sont vraies (pas juste
+           « l'utilisateur est arrivé jusqu'ici ») : OSC confirmé par la sonde
+           (osc_config_ma3), plugin ACTIF (pas juste posé), raccourcis déjà
+           envoyés au moins une fois.
+           🔁 Revirement assumé (décision auteur, session du 18/09/2026) : le
+           bouton déclenche maintenant RÉELLEMENT toggleBridge() — l'ancienne
+           règle (« ne pas démarrer à la place de l'utilisateur ») est levée
+           PRÉCISÉMENT PARCE QUE le bouton dit « Démarrer le bridge » et le
+           fait vraiment : GUIDE_PROJET.md, « un bouton qui ment coûte plus cher
+           qu'un bouton absent » — un bouton qui fait ce qu'il annonce n'est
+           pas un bouton qui ment. Voir allerDemarrerBridge() (ui/parametres.js) :
+           démarre, bascule sur l'onglet Bridge, puis referme les blocs d'aide
+           « pourquoi » (details.help) du wizard pour ne pas laisser le
+           fouillis pour la prochaine visite de Paramètres. -->
+      <div id="miseEnRouteFinale" style="display:none;margin-top:14px;padding-top:12px;
+           border-top:1px solid var(--border)">
+        <b data-i18n="ui.param.fw.final.titre">✅ Étape E — Tout est configuré.</b>
+        <!-- « Sauvegarder la configuration » AJOUTÉ (18/09/2026, demande auteur),
+             JUSTE AVANT « Démarrer le bridge » : réutilise saveActiveProfile()
+             (ui/profils.js, même code que « 💾 Enregistrer » de l'en-tête) —
+             aucune logique dupliquée, juste un accès direct depuis le wizard
+             pour ne pas perdre la personnalisation faite en C/D si l'utilisateur
+             quitte avant de penser à l'enregistrer lui-même. -->
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn" onclick="sauvegarderConfigWizard()" data-i18n="ui.param.guide.sauvegarder">💾 Sauvegarder la configuration</button>
+          <span class="muted" id="sauvegardeWizardMsg" style="font-size:12.5px"></span>
+        </div>
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn primary" onclick="allerDemarrerBridge()" data-i18n="ui.param.fw.final.bouton">▶ Démarrer le bridge</button>
+        </div>
+        <!-- « Étape précédente » RÉINTÉGRÉ (18/09/2026) : D a de nouveau son
+             propre drapeau manuel (_etapeDPasseeManuel) depuis le repli sur
+             un bouton neutre pour D→E — voir le commentaire au-dessus de
+             #etapeDRaccourcis. En bas à droite, même motif que D. -->
+        <div class="toolbar" style="margin-top:14px;justify-content:flex-end">
+          <button class="btn" onclick="etapePrecedente('D')" data-i18n="ui.param.guide.etape_precedente">← Étape précédente</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Zone de désinstallation — TOUT À LA FIN, visuellement à part ═══
+       Action destructive : le bouton n'efface rien, il ouvre une fenêtre de
+       confirmation (voir #voileDesinstall). Toute la logique est dans
+       ui/parametres.js, en portée globale (onclick=…). -->
+  <div class="card" style="border:1px solid var(--red);margin-top:26px">
+    <h2 style="color:var(--red)" data-i18n="ui.param.desinstall.titre">Zone de désinstallation</h2>
+    <div class="muted" style="font-size:13px;margin-bottom:10px" data-i18n="ui.param.desinstall.txt">
+      Retire Wing Bridge de cette machine : les deux process de l'app, son
+      dossier de données, et le plugin installé dans grandMA3. Irréversible.
+    </div>
+    <div class="toolbar">
+      <button class="btn danger" onclick="ouvrirDesinstall()" data-i18n="ui.param.desinstall.bouton">Désinstaller Wing Bridge</button>
+      <span class="muted" data-i18n="ui.param.desinstall.hint">Ouvre une fenêtre de confirmation — rien n'est supprimé avant.</span>
+    </div>
+  </div>
+</section>
+<!-- ═══ AIDE ═══
+     Toute l'aide de l'app, rassemblée et RANGÉE PAR ONGLET. Elle vivait avant
+     dans 11 blocs dépliants semés dans le balisage, dont 7 rien que dans
+     Bridge : l'écran était noyé d'explications qu'on ne lit qu'une fois.
+     ⚠️ Les textes ne sont PAS recopiés ici — ils viennent de ui/aides.js, la
+        même source que les « ? ». Deux copies auraient divergé. -->
+<section id="tab-aide">
+  <div class="intro" data-i18n-html="ui.aide.intro">
+    <span class="t">Aide</span>
+    Tout ce qu'il faut savoir, rangé par onglet. Rien ici n'est obligatoire :
+    l'app fonctionne sans lire une ligne. C'est là quand tu en as besoin.
+  </div>
+  <div id="aideSommaire"></div>
+</section>
+
+<!-- ═══ Bannière flottante de la Configuration guidée (Étape C, Paramètres) ═══
+     HORS de tout onglet exprès : position:fixed, doit rester
+     visible en changeant d'onglet (Touches → Faders → Encodeurs) — c'est tout
+     le principe du guidage. Pilotée par configGuideeDemarrer() et sœurs
+     (ui/parametres.js). Ne contient AUCUNE copie de formulaire : elle se
+     contente de désigner (scrollIntoView + surlignage) la VRAIE grille/le
+     VRAI groupe dans l'onglet réel — la grille de faders et les groupes
+     d'encodeurs restent la SEULE source, jamais dupliqués ici. -->
+<div id="guideBanniere" style="display:none;position:fixed;left:16px;right:16px;bottom:16px;
+     z-index:500;max-width:640px;margin:0 auto;background:var(--card);
+     border:1px solid var(--accent);border-radius:10px;padding:12px 16px;
+     box-shadow:0 4px 20px rgba(0,0,0,.4)">
+  <div class="toolbar" style="justify-content:space-between;flex-wrap:nowrap">
+    <b id="guideBanniereTitre" style="color:var(--accent)"></b>
+    <button class="aide" onclick="configGuideeQuitter()" title="Quitter la configuration guidée" data-i18n-title="ui.param.guide.quitter_tip">✕</button>
+  </div>
+  <div class="muted" id="guideBanniereTxt" style="font-size:12.5px;margin-top:4px"></div>
+  <div class="toolbar" style="margin-top:8px">
+    <button class="btn primary" id="guideBanniereSuivant" onclick="configGuideeSuivant()"></button>
+  </div>
+</div>
+
+</main>
+
+<!-- ═══ Le JavaScript vit dans src/ui/ ═══
+
+     ⚠️⚠️ L'ORDRE CI-DESSOUS EST IMPOSÉ, ne pas le remanier à la légère :
+       • `core` EN PREMIER  — il déclare les globales (profile, currentMode…)
+         que les autres lisent, et api()/setHealth() dont tous se servent ;
+       • `i18n` JUSTE APRÈS  — il déclare t()/tHtml()/appliquerLangue()/LANG,
+         que bridge.js/touches.js/… appellent dès leur premier rendu, et lance
+         le chargement des catalogues (window.I18N_PRET) ;
+       • `init` EN DERNIER  — il ATTEND I18N_PRET puis APPELLE les fonctions des
+         autres fichiers et lance les deux minuteurs. Placé plus haut, il
+         s'exécuterait avant que ces fonctions existent.
+     `defer` garantit l'exécution après l'analyse du document ET dans l'ordre
+     de déclaration — c'est lui qui rend cet ordre fiable.
+
+     ⚠️ SCRIPTS CLASSIQUES, JAMAIS `type="module"` : une quarantaine de
+     gestionnaires inline de ce fichier (onclick=…) exigent la portée globale.
+     Un module les tuerait tous d'un coup, sans erreur au chargement.
+
+     ⚠️ Le dossier `ui/` entier doit être embarqué par les deux scripts de
+     build (`--add-data "$SRC/ui:ui"`). Un fichier manquant = interface inerte ;
+     les scripts de build refusent de finir dans ce cas. -->
+<div class="voile" id="voileAide" onclick="fermerAide(event)">
+  <div class="modale" onclick="event.stopPropagation()">
+    <header><h3 id="aideTitre" data-i18n="ui.modale.aide.titre">Aide</h3>
+      <button class="btn" onclick="fermerAide()" data-i18n="ui.modale.aide.fermer">Fermer</button></header>
+    <div class="corps" id="aideCorps"></div>
+  </div>
+</div>
+
+<!-- ═══ Fenêtre de désinstallation ═══
+     Deux voies : « Tout supprimer » (résumé + résidu manuel) ou « Conserver
+     certaines informations » (3 cases). Après l'action : l'écran final liste
+     le résidu manuel renvoyé par l'endpoint, puis l'app se ferme.
+     ⚠️ Rien de purement interne à l'app ne survit dans aucun des deux modes. -->
+<div class="voile" id="voileDesinstall" onclick="fermerDesinstall(event)">
+  <div class="modale" onclick="event.stopPropagation()">
+    <header><h3 data-i18n="ui.modale.desinstall.titre">Désinstaller Wing Bridge</h3>
+      <button class="btn" onclick="fermerDesinstall()" data-i18n="ui.modale.desinstall.fermer">Fermer</button></header>
+    <div class="corps">
+      <div id="desinstallChoix">
+        <p data-i18n="ui.modale.desinstall.choix">Comment veux-tu procéder ?</p>
+        <div class="toolbar">
+          <button class="btn danger" onclick="desinstallVoieTout()" data-i18n="ui.modale.desinstall.tout">Tout supprimer</button>
+          <button class="btn" onclick="desinstallVoieConserver()" data-i18n="ui.modale.desinstall.conserver">Conserver certaines informations</button>
+        </div>
+      </div>
+
+      <div id="desinstallTout" hidden>
+        <h4 data-i18n="ui.modale.desinstall.supprime_titre">Ce qui va être supprimé</h4>
+        <ul>
+          <li data-i18n-html="ui.modale.desinstall.li_process">Les <b>deux process</b> de l'app : le moteur et l'assistant clavier.</li>
+          <li data-i18n-html="ui.modale.desinstall.li_dossier">Le <b>dossier de données</b> de l'app : profils, journal, réglages, état interne.</li>
+          <li data-i18n-html="ui.modale.desinstall.li_plugin">Le <b>plugin grandMA3</b> installé et son fichier d'état.</li>
+        </ul>
+        <h4 data-i18n="ui.modale.desinstall.reste_titre">Ce qui restera à faire à la main</h4>
+        <p class="hnote" data-i18n="ui.modale.desinstall.hnote1">La liste exacte s'affiche à la fin de l'opération (elle dépend de ta machine).</p>
+        <div class="toolbar">
+          <button class="btn danger" onclick="desinstallExecuter()" data-i18n="ui.modale.desinstall.executer1">Désinstaller maintenant</button>
+        </div>
+      </div>
+
+      <div id="desinstallConserver" hidden>
+        <h4 data-i18n="ui.modale.desinstall.conserver_titre">Informations à conserver</h4>
+        <ul style="list-style:none;margin-left:0">
+          <li><label><input type="checkbox" id="duProfiles" checked> <span data-i18n="ui.modale.desinstall.du_profiles">Mes profils de mapping</span></label></li>
+          <li><label><input type="checkbox" id="duLog"> <span data-i18n="ui.modale.desinstall.du_log">Le journal de l'app</span></label></li>
+          <li><label><input type="checkbox" id="duPlugin"> <span data-i18n="ui.modale.desinstall.du_plugin">Le plugin grandMA3 installé</span></label></li>
+        </ul>
+        <p class="hnote" data-i18n="ui.modale.desinstall.hnote2">Tout le reste — fichiers internes, état, réglages — est supprimé
+          dans tous les cas.</p>
+        <div class="toolbar">
+          <button class="btn danger" onclick="desinstallExecuter()" data-i18n="ui.modale.desinstall.executer2">Confirmer la désinstallation</button>
+        </div>
+      </div>
+
+      <div id="desinstallFin" hidden>
+        <h4 data-i18n="ui.modale.desinstall.fin_titre">Désinstallation effectuée</h4>
+        <p data-i18n="ui.modale.desinstall.fin_reste">Il reste à faire à la main :</p>
+        <ul id="desinstallResidu"></ul>
+        <p data-i18n="ui.modale.desinstall.fin_txt">Tu peux fermer cette fenêtre et mettre le dossier de l'app à la corbeille.
+          L'app se ferme.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/ui/core.js" defer></script>
+<script src="/ui/i18n.js" defer></script>
+<script src="/ui/aides.js" defer></script>
+<script src="/ui/bridge.js" defer></script>
+<script src="/ui/touches.js" defer></script>
+<script src="/ui/faders_encodeurs.js" defer></script>
+<script src="/ui/profils.js" defer></script>
+<script src="/ui/parametres.js" defer></script>
+<script src="/ui/init.js" defer></script>
+</body>
+</html>

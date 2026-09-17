@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!-- Enveloppe d'import des plugins Wing Bridge pour grandMA3.
+     Format releve sur les exemples livres avec MA3 2.4.2
+     (shared/resource/lib_plugins/examples/*.xml) ; import re-verifie OK
+     jusqu'a grandMA3 2.5.0.3.
+
+     Les .lua doivent etre dans le MEME dossier que ce fichier :
+       ~/MALightingTechnology/gma3_library/datapools/plugins/
+     installer.sh s'en charge.
+
+     Installed="Yes" : sans ca, MA3 recopie le code DANS le showfile
+     (InStream) et ReloadAllPlugins n'a plus aucun effet. Si l'attribut n'est
+     pas repris a l'import, le forcer a la main :
+       Set Plugin 1.1 Property "Installed" "Yes"
+
+     ATTENTION : la fenetre d'import de MA3 liste les FICHIERS XML, pas les
+     plugins qu'ils contiennent. Un XML = une entree visible. C'est pourquoi
+     l'amorce a son propre wingloader.xml, separe de celui-ci.
+     !! NE PAS AJOUTER Installed="Yes" NI AUCUN AUTRE ATTRIBUT ICI.
+     Essaye : MA3 ne se contente pas de l'ignorer, il bascule le
+     composant en ressource interne (Is Resource=Yes), cherche le .lua dans le
+     dossier de l'application au lieu de gma3_library, ne le trouve pas
+     (File Exists=No) et affiche la ligne en ROUGE. Le format ci-dessous est
+     celui, mot pour mot, des exemples livres avec MA3.
+     Installed se regle APRES l'import, dans la fenetre ou par :
+       Set Plugin <n>.1 Property "Installed" "Yes"
+-->
+<GMA3 DataVersion="0.8.84.0">
+    <UserPlugin Name="WingBridge" Version="0.0.2.0">
+        <ComponentLua Name="WingBridge" FileName="wingbridge.lua" />
+    </UserPlugin>
+</GMA3>

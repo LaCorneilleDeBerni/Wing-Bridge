@@ -1,0 +1,191 @@
+{
+  "name": "🛟 Config sûre",
+  "buttons": {
+    "0x05": "Menu",
+    "0x09": "Select",
+    "0x0e": "Delete",
+    "0x16": "Copy",
+    "0x26": "Move",
+    "0x27": "Assign",
+    "0x31": "Oops",
+    "0x38": "Update",
+    "0x39": "Clear",
+    "0x40": "Store",
+    "0x46": "Please",
+    "0x1b": "Sequence",
+    "0x1c": "Cue",
+    "0x1d": "Executor",
+    "0x3a": "1",
+    "0x3b": "2",
+    "0x3c": "3",
+    "0x32": "4",
+    "0x33": "5",
+    "0x34": "6",
+    "0x2a": "7",
+    "0x2b": "8",
+    "0x2c": "9",
+    "0x42": "0",
+    "0x43": ".",
+    "0x2d": "+",
+    "0x3d": "-",
+    "0x35": "Thru",
+    "0x45": "At",
+    "0x44": "If",
+    "0x7e": "Go+",
+    "0x78": "Go+ Executor 101",
+    "0x79": "Go+ Executor 102",
+    "0x7a": "Go+ Executor 103",
+    "0x7b": "Go+ Executor 104",
+    "0x7c": "Go+ Executor 105",
+    "0x7d": "Go+ Executor 106",
+    "0x70": "Go+ Executor 201",
+    "0x71": "Go+ Executor 202",
+    "0x72": "Go+ Executor 203",
+    "0x73": "Go+ Executor 204",
+    "0x74": "Go+ Executor 205",
+    "0x75": "Go+ Executor 206",
+    "0x76": "Pause",
+    "0x77": "Go-",
+    "0x48": "__ENC1_PUSH__",
+    "0x49": "__ENC2_PUSH__",
+    "0x4a": "__ENC3_PUSH__",
+    "0x4b": "__ENC4_PUSH__"
+  },
+  "executor_ref": {
+    "0x78": "Executor 101",
+    "0x79": "Executor 102",
+    "0x7a": "Executor 103",
+    "0x7b": "Executor 104",
+    "0x7c": "Executor 105",
+    "0x7d": "Executor 106",
+    "0x70": "Executor 201",
+    "0x71": "Executor 202",
+    "0x72": "Executor 203",
+    "0x73": "Executor 204",
+    "0x74": "Executor 205",
+    "0x75": "Executor 206"
+  },
+  "faders": [
+    {
+      "kind": "executor",
+      "exec": 101
+    },
+    {
+      "kind": "executor",
+      "exec": 102
+    },
+    {
+      "kind": "executor",
+      "exec": 103
+    },
+    {
+      "kind": "executor",
+      "exec": 104
+    },
+    {
+      "kind": "executor",
+      "exec": 105
+    },
+    {
+      "kind": "executor",
+      "exec": 106
+    },
+    {
+      "kind": "executor",
+      "exec": 107
+    },
+    {
+      "kind": "executor",
+      "exec": 108
+    }
+  ],
+  "enc_groups": [
+    [
+      "Dimmer",
+      "Iris",
+      "Shutter1",
+      null
+    ],
+    [
+      "Pan",
+      "Tilt",
+      "Zoom",
+      "Focus1"
+    ],
+    [
+      "Gobo1",
+      "Gobo1Pos",
+      "Gobo2",
+      "Gobo2Pos"
+    ],
+    [
+      "ColorRGB_R",
+      "ColorRGB_G",
+      "ColorRGB_B",
+      "ColorRGB_W"
+    ]
+  ],
+  "enc_default_group": 1,
+  "enc_step": 1.0,
+  "leds": {},
+  "console_keys": {
+    "Store": "s",
+    "Update": "u",
+    "Please": "Enter",
+    "Clear": "Delete",
+    "Oops": "Ctrl+Z",
+    "Move": "Ctrl+M",
+    "Copy": "Ctrl+C",
+    "Delete": "Ctrl+D",
+    "Align": "Ctrl+A",
+    "Select": "Ctrl+S",
+    "Goto": "Alt+G",
+    "Assign": "Ctrl+Alt+V",
+    "Edit": "e",
+    "Time": "Ctrl+T",
+    "Stomp": "Alt+T",
+    "Help": "Ctrl+Alt+H",
+    "Set": "o",
+    "Fixture": "f",
+    "Channel": "c",
+    "Group": "g",
+    "Preset": "p",
+    "Sequence": "Alt+S",
+    "Cue": "Alt+C",
+    "Thru": "t",
+    "At": "a",
+    "If": "i",
+    "Full": "Ctrl+F",
+    "Highlight": "h",
+    "On": "Ctrl+O",
+    "Off": "o",
+    "Solo": "Ctrl+Alt+S",
+    "Freeze": "Alt+F",
+    "Preview": "Ctrl+Alt+P",
+    "Blind": "b",
+    "SelFix": "Ctrl+Alt+F",
+    "Menu": "F12",
+    "Go+": "Ctrl+G",
+    "Go-": "Ctrl+Alt+G",
+    "Pause": "Ctrl+P",
+    "List": "l",
+    "Learn": "Ctrl+L",
+    "Highlt": "h",
+    "0": "0",
+    "1": "1",
+    "2": "2",
+    "3": "3",
+    "4": "4",
+    "5": "5",
+    "6": "6",
+    "7": "7",
+    "8": "8",
+    "9": "9",
+    ".": "period",
+    "+": "+",
+    "-": "minus",
+    "/": "slash"
+  },
+  "locked": true,
+  "saved_at": "2026-07-28 01:02"
+}

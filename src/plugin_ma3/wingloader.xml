@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!-- Amorce de chargement Wing Bridge.
+     A importer UNE SEULE FOIS. Elle relit wingbridge.lua sur le disque a
+     chaque appel, ce qui rend inutiles ReloadAllPlugins et les re-imports.
+     Format nu, sans attribut : ajouter Installed="Yes" ici casse l'import
+     (MA3 bascule le composant en ressource interne et perd le fichier). -->
+<GMA3 DataVersion="0.8.84.0">
+    <UserPlugin Name="WingLoader" Version="0.0.1.0">
+        <ComponentLua Name="WingLoader" FileName="wingloader.lua" />
+    </UserPlugin>
+</GMA3>
