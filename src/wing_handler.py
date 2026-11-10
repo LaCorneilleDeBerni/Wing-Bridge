@@ -697,6 +697,18 @@ class Handler(BaseHTTPRequestHandler):
         # Sans 'name' → sauvegarde sur le profil ACTIF (bouton en-tête)
         import wing_ui as core
         name = wv.texte(body, "name", 80, "")
+        # 🔒 MÊME GARDE QUE `_post_profile_delete` : le fichier cible se déduit
+        # du nom (`slugify(name).json`), et « Enregistrer sous __reference__ »
+        # écrasait la config sûre sans passer par `save_reference()` (plus de
+        # clé `locked`) — idem pour la sauvegarde auto et le profil de secours
+        # livré. `delete` et `favori` refusaient déjà, `save` non.
+        with etat.E.LOCK:
+            nom_effectif = name or etat.E.PROFILE.get("name", "")
+        fichier_cible = f"{wm.slugify(nom_effectif)}.json"
+        if fichier_cible in (core.REFERENCE_FILE.name, core.AUTOSAVE_FILE.name) \
+                or core._profil_de_secours(fichier_cible):
+            self._json({"error": _L("err.profil_nom_reserve")}, 403)
+            return
         # 🔒 LE VERROU NE PROTÈGE QUE L'INSTANTANÉ — `wm.save_profile()` écrit
         # sur DISQUE (jamais gratuit : peut tomber sur un disque lent, un
         # dossier réseau, une clé USB) et n'a rien à faire sous le MÊME verrou
@@ -707,7 +719,16 @@ class Handler(BaseHTTPRequestHandler):
                 etat.E.PROFILE["name"] = name
             profil = json.loads(json.dumps(etat.E.PROFILE))
             etat.E.STATE["dirty"] = False
-        path = wm.save_profile(profil)
+        try:
+            path = wm.save_profile(profil)
+        except Exception:
+            # L'écriture a échoué (disque plein, droits) : `dirty` était déjà
+            # retombé à False, et `autosave_loop` aurait supprimé le fichier
+            # de récupération dans les 5 s — le travail n'existait plus qu'en
+            # mémoire. On réarme `dirty` avant de laisser remonter le 500.
+            with etat.E.LOCK:
+                etat.E.STATE["dirty"] = True
+            raise
         core.log("journal.profil.enregistre", nom=profil["name"])
         self._json({"ok": True, "file": path.name})
 
@@ -779,9 +800,18 @@ class Handler(BaseHTTPRequestHandler):
         if f and f in (core.REFERENCE_FILE.name, core.AUTOSAVE_FILE.name):
             self._json({"ok": False, "raison": _L("err.fichier_systeme")})
             return
-        if f and not (wm.PROFILE_DIR / f).exists():
-            self._json({"ok": False, "raison": _L("err.profil_introuvable")})
-            return
+        if f:
+            # 🔒 Même confinement que `/api/profile/load` : `PROFILE_DIR / f`
+            # avec `f` absolu VAUT le chemin absolu, et `../settings.json`
+            # passait — le favori était ensuite chargé comme profil au
+            # démarrage (`charger_favori`). Contrôle test_profil_favori_confine.
+            chemin = wing_profils.chemin_profil(f)
+            if chemin is None:
+                self._json({"error": _L("err.chemin_invalide")}, 400)
+                return
+            if not chemin.exists():
+                self._json({"ok": False, "raison": _L("err.profil_introuvable")})
+                return
         core.reglage_poser(profil_favori=f)
         core.save_settings()
         core.log("journal.profil.favori_pose" if f

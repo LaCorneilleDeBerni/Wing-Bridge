@@ -291,7 +291,7 @@ def pickup_page_changee():
     if ancienne is None:
         return False                      # premier relevé : rien à relâcher
     repris = 0
-    for i, st in etat.E.PICKUP.items():
+    for i, st in list(etat.E.PICKUP.items()):   # copie : PICKUP.clear() (fil HTTP) pendant l'itération
         if st["pris"]:
             st["pris"] = False
             st["signe"] = 0
@@ -335,7 +335,7 @@ def pickup_verifier_repos(faders_phys=None):
         return                            # déjà tout relâché
     now = time.time()
     faders = faders_instantane()             # jamais LOCK dans la boucle USB
-    for i, st in etat.E.PICKUP.items():
+    for i, st in list(etat.E.PICKUP.items()):   # copie : PICKUP.clear() (fil HTTP) pendant l'itération
         if not st["pris"] or now - st["bouge"] < PICKUP_REPOS_S:
             continue
         if i >= len(faders):
@@ -352,7 +352,7 @@ def pickup_verifier_repos(faders_phys=None):
     # Sens inverse : le fader est déjà en place, on lève le clignotement.
     if faders_phys is None:
         return
-    for i, st in etat.E.PICKUP.items():
+    for i, st in list(etat.E.PICKUP.items()):   # copie : PICKUP.clear() (fil HTTP) pendant l'itération
         if st["pris"] or now - st["bouge"] < PICKUP_REPOS_S:
             continue                      # déjà pris, ou en cours de mouvement
         if i >= len(faders) or i >= len(faders_phys):

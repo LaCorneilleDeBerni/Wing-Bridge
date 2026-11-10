@@ -133,8 +133,12 @@ async function consoleTest() {
 async function openAccessibility() {
   const btn = document.getElementById("accessBtn");
   btn.textContent = t("ui.bridge.access.attente");
-  await api("/api/console/open_settings", {});
-  setTimeout(() => { btn.textContent = t("ui.bridge.access.bouton"); }, 15000);
+  try { await api("/api/console/open_settings", {}); }
+  finally {
+    // Le libellé revient dans tous les cas : si la requête lève, le bouton
+    // restait figé sur « attente » sans jamais réarmer ce minuteur.
+    setTimeout(() => { btn.textContent = t("ui.bridge.access.bouton"); }, 15000);
+  }
 }
 
 
@@ -288,6 +292,7 @@ async function shcutsEnvoyer(btnId = "btnShcuts", txtId = "shcutsEtat") {
   z.textContent = t("ui.touches.rac.envoi");
   let r = null;
   try { r = await api("/api/shcuts/envoyer", {}); }
+  catch (e) { r = {ok: false, erreur: t("ui.commun.moteur_injoignable")}; }  // sinon « envoi… » à vie
   finally { b.disabled = false; }
   // On RELIT l'état avant d'annoncer quoi que ce soit : le message dit ce qui
   // est, pas ce qu'on espérait. (Règle du projet : jamais de « ✓ envoyé »

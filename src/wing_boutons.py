@@ -68,6 +68,17 @@ def _debounced(btn_id: int, kind: str) -> bool:
     return False
 
 
+def _memoriser_off(btn_id: int, token: str):
+    """Décide À L'APPUI la contrepartie « Off » d'une commande d'executor et la
+    range dans OFF_EN_ATTENTE pour `handle_button_release`.
+
+    Conditionné à `suivi_actif()` comme le chemin du relâchement : sans sonde,
+    `token_selon_ma3` rend le texte brut, et ce n'est pas un Off."""
+    import wing_ui as core
+    if core.suivi_actif() and core._RE_EXEC_CMD.match(token.strip()):
+        etat.E.OFF_EN_ATTENTE[btn_id] = core.token_selon_ma3(token, "relachement")
+
+
 def handle_button_release(btn_id: int):
     """Relâchement d'un bouton : complète les fonctions maintenues par leur
     contrepartie Off (executors, OSC direct) OU relâche la touche clavier
@@ -105,11 +116,22 @@ def handle_button_release(btn_id: int):
         core.log(f'CONSOLE : {token} → clavier "{spec_tenu}" (relâché)')
         return
 
-    # Contrepartie « Off ». Deux chemins :
-    #  • suivi actif  → MA3 dit si sa fonction est maintenue, donc s'il faut un
-    #    Off — même quand le profil contient une commande momentanée. C'est ce
-    #    qui permet à un bouton réglé « Go+ » d'agir en Flash si MA3 le dit.
+    # Contrepartie « Off ». Trois chemins, dans cet ordre :
+    #  • Off MÉMORISÉ à l'appui (OFF_EN_ATTENTE) → on l'envoie tel quel. C'est
+    #    le seul moyen de garantir que le Off répond au On réellement parti :
+    #    recalculer ici via `token_selon_ma3` redemandait à MA3, dont l'état a
+    #    pu changer pendant le maintien (page tournée de l'autre main, sonde
+    #    périmée au-delà de MA3_ETAT_PEREMPTION_S) → `None` ou repli sur le
+    #    texte du profil → aucun Off → EXECUTOR BLOQUÉ ALLUMÉ.
+    #  • suivi actif sans Off mémorisé (appui parti avant que la sonde ne
+    #    soit active) → MA3 dit si sa fonction est maintenue.
     #  • sans suivi   → comportement historique, sur le seul texte du profil.
+    if btn_id in etat.E.OFF_EN_ATTENTE:
+        off_cmd = etat.E.OFF_EN_ATTENTE.pop(btn_id)
+        if off_cmd:
+            etat.E.OSC.send_message("/cmd", off_cmd)
+            core.log(f'RELÂCHÉ : "{off_cmd}"')
+        return
     if core.suivi_actif() and core._RE_EXEC_CMD.match(token.strip()):
         off_cmd = core.token_selon_ma3(token, "relachement")
         if off_cmd is None:
@@ -362,9 +384,11 @@ def handle_button_bridge(btn_id: int):
         # d'executor TAPERAIT « Go+ » au lieu de l'exécuter.
         # Un verbe attend sa cible → on ASSEMBLE la commande et on l'envoie en OSC,
         # sans rien taper (voir _console_executer).
-        if key in exec_ref and verbe_en_attente():
+        # Un SEUL appel : la péremption du verbe (10 s) pouvait tomber entre
+        # deux lectures → `verbe = None` → « None Executor 101 » envoyé en OSC.
+        verbe = verbe_en_attente() if key in exec_ref else None
+        if verbe:
             ref   = exec_ref[key]
-            verbe = verbe_en_attente()
             debut = etat.E.CONSOLE_CIBLES["cmd"] or verbe
             # Ce bouton a servi de CIBLE : son relâchement ne doit pas être
             # réinterprété comme celui d'un bouton d'executor.
@@ -396,6 +420,7 @@ def handle_button_bridge(btn_id: int):
         # préfixes laissait « Flash Executor 105 » partir en OSC brut, sans le On/Off
         # qu'exige une fonction maintenue.
         if key in exec_ref or core._RE_EXEC_CMD.match(token.strip()):
+            _memoriser_off(btn_id, token)
             token = core.token_selon_ma3(token, "appui")
             if token is None:      # MA3 dit : rien à envoyer pour cet événement
                 return
@@ -503,9 +528,12 @@ def handle_button_bridge(btn_id: int):
     # ── Commande d'executor : MA3 fait autorité, comme en mode console ───────
     #
     # ⚠️ Appui et relâchement doivent TOUJOURS être décidés par la même fonction
-    # (`token_selon_ma3`). Sinon — profil « Flash On Executor 105 », MA3 réglé sur
-    # Go+ — l'appui envoie Flash On, le relâchement rien : EXECUTOR BLOQUÉ ALLUMÉ.
+    # (`token_selon_ma3`) ET AU MÊME INSTANT : le Off est calculé ici, à
+    # l'appui, et mémorisé (OFF_EN_ATTENTE) pour que le relâchement le rejoue
+    # tel quel. Le recalculer au relâchement ne suffisait pas : si MA3 changeait
+    # d'état pendant le maintien, le Off devenait `None` → EXECUTOR BLOQUÉ ALLUMÉ.
     if core.suivi_actif() and core._RE_EXEC_CMD.match(token.strip()):
+        _memoriser_off(btn_id, token)
         cible = core.token_selon_ma3(token, "appui")
         if cible is None:
             return                      # MA3 n'a rien à cet endroit

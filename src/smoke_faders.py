@@ -193,6 +193,48 @@ def test_executor_symetrie(wv):
             else:
                 echec(f"0x{btn:02x} : appui/relâchement incohérents",
                       f"attendu : {attendu}\nobtenu  : {obtenu}\n{pourquoi}")
+
+        # ── MA3 change d'état PENDANT le maintien (audit du 10/11/2026) ──
+        # Même règle des deux côtés ne suffisait pas : le relâchement
+        # REDEMANDAIT à MA3. Page tournée de l'autre main pendant un Flash
+        # maintenu → `ma3_executor(105)` rend None au relâchement → aucun Off
+        # → executor bloqué allumé. Le Off doit être décidé À L'APPUI et
+        # rejoué tel quel (OFF_EN_ATTENTE, comme MAINTIENS pour le clavier).
+        def maintien_page_tournee():
+            envoyes.clear()
+            wv._btn_last_event.clear(); wv.DERNIER_APPUI.clear()
+            wv.handle_button_bridge(0x7c)              # Flash On (MA3 dit Flash)
+            page_avant = faux_etat["executors"]
+            faux_etat["executors"] = []                # page tournée : 105 absent
+            try:
+                wv._btn_last_event.clear()
+                wv.handle_button_release(0x7c)
+            finally:
+                faux_etat["executors"] = page_avant
+            return list(envoyes)
+
+        attendu = ["Flash On Executor 105", "Flash Off Executor 105"]
+        obtenu = maintien_page_tournee()
+        if obtenu == attendu:
+            ok("page tournée pendant le maintien : le Off décidé à l'appui part quand même")
+        else:
+            echec("page tournée pendant le maintien : Off perdu → executor bloqué allumé",
+                  f"attendu : {attendu}\nobtenu  : {obtenu}")
+        # Réinjection : plus de mémorisation → le relâchement recalcule → None.
+        # (`wv` est wing_ui ; la fonction vit dans wing_boutons, et l'appui la
+        # résout dans SON espace de noms — c'est là qu'il faut la neutraliser.)
+        import wing_boutons as _wb
+        sauve_mem = _wb._memoriser_off
+        _wb._memoriser_off = lambda *a, **k: None
+        try:
+            bug = maintien_page_tournee()
+        finally:
+            _wb._memoriser_off = sauve_mem
+            etat.E.OFF_EN_ATTENTE.clear()
+        if bug == ["Flash On Executor 105"]:
+            ok("réinjection (Off recalculé au relâchement) → Off perdu : le contrôle sait voir rouge")
+        else:
+            echec("réinjection NON détectée — contrôle aveugle", str(bug))
     except Exception as e:
         echec("le contrôle appui/relâchement a levé une exception",
               f"{type(e).__name__}: {e}")
