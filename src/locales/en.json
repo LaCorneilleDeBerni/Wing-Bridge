@@ -704,7 +704,7 @@
   "journal.fw.capture_blob_ok": "📡 capture — valid firmware blob extracted",
   "journal.fw.capture_annulee_usbpcap_retire": "📡 capture — cancelled by the user; USBPcap removed",
   "journal.fw.capture_annulee_usbpcap_garde": "📡 capture — cancelled by the user; USBPcap NOT removed (fallback button shown)",
-  "journal.fw.capture_echec_detail": "📡 capture — failed: interfaces={iface}, pcap={pcap}, script_error={err}",
+  "journal.fw.capture_echec_detail": "📡 capture — failed: interfaces={iface}, pcap={pcap}, script_error={err}, last_script_step=“{etape}”",
   "journal.fw.capture_wing_pas_debranchee": "📡 capture — wing not unplugged before cleanup (removing USBPcap anyway)",
   "journal.fw.capture_feu_vert": "📡 capture — green light for USBPcap cleanup (MA2 closed, wing gone)",
   "firmware.etape.annulation": "Cancellation requested — clean shutdown in progress (removing USBPcap if needed)…",

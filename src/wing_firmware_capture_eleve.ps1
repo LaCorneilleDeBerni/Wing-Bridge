@@ -153,8 +153,18 @@ function Start-ProcessAvecTimeout {
 function Get-UsbpcapInterfaces {
     param([string]$CmdExe, [string]$WorkDir)
     $ifaceTmp = Join-Path $WorkDir "interfaces.txt"
-    Start-Process -FilePath $CmdExe -ArgumentList '--extcap-interfaces' `
-        -RedirectStandardOutput $ifaceTmp -Wait -WindowStyle Hidden | Out-Null
+    # ⏱ BORNÉ (10/11/2026). `-Wait` seul n'a pas de limite : sur un Dell XPS 7590
+    # le script élevé est resté figé ~5 min 30 avant son premier iface_count,
+    # sans qu'on sache si c'était ICI ou dans Restart-RootHubs (cf.
+    # docs/WINDOWS.md, « Échec constaté sur un Dell XPS 7590 »). On écrit le
+    # statut AVANT, on attend au plus 30 s, et on dit si ça n'a pas répondu.
+    Write-Status "liste des interfaces USBPcap (USBPcapCMD --extcap-interfaces)…"
+    $p = Start-Process -FilePath $CmdExe -ArgumentList '--extcap-interfaces' `
+        -RedirectStandardOutput $ifaceTmp -WindowStyle Hidden -PassThru
+    if (-not $p.WaitForExit(30000)) {
+        try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch { }
+        Write-Status "USBPcapCMD --extcap-interfaces n'a pas répondu en 30 s (tué)"
+    }
     $out = @()
     if (Test-Path $ifaceTmp) {
         foreach ($line in Get-Content $ifaceTmp) {
@@ -189,13 +199,22 @@ function Restart-RootHubs {
                Where-Object { $_.InstanceId -like 'USB\ROOT_HUB*' } |
                Select-Object -ExpandProperty InstanceId
     } catch { }
+    if (-not $ids.Count) { Write-Status "aucun root hub USB trouvé (Get-PnpDevice)" }
     foreach ($id in $ids) {
         $ok = $false
+        # ⏱ BORNÉ (10/11/2026) : statut AVANT chaque hub + 20 s maximum par
+        # pnputil — même raison que Get-UsbpcapInterfaces (figé illisible sur
+        # un Dell XPS 7590). Chemin absolu : pas de résolution par le PATH.
+        Write-Status "redémarrage du root hub $id (pnputil /restart-device)…"
         try {
-            & pnputil /restart-device "$id" 2>&1 | Out-Null
-            $ok = ($LASTEXITCODE -eq 0)
+            $pnputil = Join-Path $env:SystemRoot 'System32\pnputil.exe'
+            $p = Start-ProcessAvecTimeout -FilePath $pnputil `
+                -ArgumentList @('/restart-device', "$id") -TimeoutMs 20000
+            if ($null -eq $p) { Write-Status "pnputil n'a pas répondu en 20 s pour $id (tué)" }
+            $ok = ($null -ne $p -and $p.ExitCode -eq 0)
         } catch { $ok = $false }
         if (-not $ok) {
+            Write-Status "root hub $id : repli Disable/Enable-PnpDevice…"
             # `restart-device` échoue si le hub est « en attente de redémarrage
             # système » (constaté en réel après plusieurs cycles) — Disable puis
             # Enable, LUI, débloque même dans ce cas (vérifié). Enable dans
