@@ -5,6 +5,35 @@ All notable changes to Wing Bridge are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project aims for [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Executor held down while MA3 changes state** (page turned with the other
+  hand, probe stale): the “Off” was recomputed on release and could be lost,
+  leaving the executor **stuck on**. The Off is now decided at press time and
+  replayed as is on release.
+- Button LED could stay frozen if LED feedback or the chaser was toggled
+  between press and release.
+- *Save as…* with a reserved name (`__reference__`, `__autosave__`, the
+  shipped fallback profile) silently overwrote the safe config; now refused
+  (403) and reported in the interface.
+- `/api/profile/favori` was not confined to the profiles folder.
+- An invalid OSC target in `settings.json` made **all** other settings fall
+  back to defaults on the next save; only the target does now.
+- A failed profile save could let the auto-save delete the recovery file.
+- A command-line verb expiring between two reads could send `None Executor N`.
+- A faders-pickup reset from the UI during a USB loop iteration lost one tick.
+- Uninstall dialog claimed success when the engine had not answered; six other
+  buttons could leave a “working…” text forever after a failed request.
+
+### Known issues
+
+- **Integrated firmware capture can hang on some PCs** (seen on a Dell XPS
+  7590, Windows 11 Pro: every attempt stalled at step 3 then failed with no
+  interface detected). Cause not established. Workaround: manual Wireshark
+  capture + *Import a capture*. See `README.md`, “Known limitations”.
+
 ## [1.0.0] — 2026-09-27
 
 First public release. Wing Bridge makes a grandMA2 onPC command wing (VID

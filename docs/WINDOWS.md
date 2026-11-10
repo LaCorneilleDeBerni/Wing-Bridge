@@ -604,6 +604,51 @@ par une détection — pas de sous-endpoints, une machine à états dans
 1-2 et la reprise 5-7 où `usb_loop` doit au contraire tourner). Fenêtre de
 capture 150 s + `GRACE_APRES_WING_S` (60 s après le retour de la wing).
 
+### 🔴 Échec constaté sur un Dell XPS 7590 — cause NON établie (09-10/10/2026)
+
+Journal `wing_server.log` d'un testeur externe (Windows 11 Pro, build #252),
+lu en entier le 19/10/2026 : **11 tentatives de capture, 0 réussie**, sur
+4 lancements de l'app en deux jours. Signature identique à chaque fois :
+
+- l'assistant atteint l'étape 3/7 « Preparing the recording », puis **plus
+  rien pendant 5 min 30-35 s** — exactement `timeout_s` (150) + 60 s de marge
+  + 120 s d'attente du nettoyage (`wing_firmware_capture.py`, boucle de
+  `capturer_firmware` et `_attendre_termine`) ;
+- fin : `capture — failed: interfaces=?, pcap=aucun, script_error=—`. Or le
+  `finally` du script élevé écrit TOUJOURS `iface_count` (même 0) et `erreur`
+  dans son statut « terminé ». Python ne l'a jamais reçu → **le script élevé
+  ne s'est pas terminé : il était figé avant son premier `Write-Status`
+  d'interfaces**, et vivant (sinon la boucle sortait en 1 s sur « process
+  mort »).
+
+**Trois attentes sans limite de temps** sont candidates, impossible de
+trancher sans les dossiers `capture_debug_*` de la machine (non obtenus) :
+`Get-UsbpcapInterfaces` (`Start-Process -Wait` sur `USBPcapCMD
+--extcap-interfaces`, appelé deux fois) et `Restart-RootHubs` (`pnputil
+/restart-device`, puis `Disable/Enable-PnpDevice`).
+
+La boucle « wing opérationnelle 12 Mb/s mais muette / `Access denied` » qui
+suit chaque échec **n'incrimine pas `Restart-RootHubs`** : elle est celle
+documentée plus haut (« Piloter une wing déjà démarrée par grandMA2 onPC ») —
+l'assistant fait lancer grandMA2 onPC à l'étape 1 et ne demande sa fermeture
+qu'à l'étape 5, jamais atteinte ; onPC garde la wing d'une relance à l'autre,
+et un redémarrage Windows « répare » aussi parce qu'il le ferme.
+
+⛔ **Hypothèse réfutée (18/10/2026)** : « `Restart-RootHubs` casse durablement
+l'USB sur cette machine, il faut abandonner l'attache à chaud ». Un diff
+retirant les deux appels a été écrit puis **annulé le 10/11/2026** sans être
+buildé : le journal ne désigne pas cette fonction plutôt qu'une autre, et le
+retrait touchait aussi le nettoyage (« À BUS CALME » ci-dessous), avec un
+risque de régression pour tout le monde. Le diff est conservé en
+`src/archives/diff_2026-10-18_usbpcap_attache_a_chaud.patch` (hors dépôt).
+
+**Ce qui est fait à la place** : « bug connu » dans `README.md` et
+`CHANGELOG.md` avec le repli manuel ci-dessous ; et, sur la branche
+`correctifs-v1.0.1`, une limite de temps + un `Write-Status` avant chacune des
+trois attentes, pour que le prochain échec dise OÙ il bloque. Détail dans la
+section « Capture : attentes bornées » une fois cette partie testée sur une
+vraie machine Windows.
+
 ### Repli manuel (Wireshark)
 
 Toujours conservé : installer Wireshark (qui propose USBPcap), capturer
