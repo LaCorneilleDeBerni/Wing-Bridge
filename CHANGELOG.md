@@ -7,6 +7,17 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.1] — 2026-11-12
+
+Maintenance release: same features as 1.0.0, 15 fixes from a full code audit,
+known issues documented. Build **#253** on both platforms. Verified on
+2026-11-12 on a Windows x64 PC with a real wing and grandMA3 onPC (USB loop,
+faders, held executor across a page change, LED feedback, profiles, firmware
+capture); the macOS build is the same source, checked by the 83-control smoke
+test.
+
 ### Fixed
 
 - **Executor held down while MA3 changes state** (page turned with the other
