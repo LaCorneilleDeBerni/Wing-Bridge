@@ -17,13 +17,11 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Fixed
 
-<<<<<<< ours
 - The Bridge dot's “N DMX/LED write(s) refused by the wing” warning was never
   reset: after a firmware capture it kept showing `[Errno 19] No such device`
   while the wing was back and healthy, until the engine was restarted (known
   issue of 1.0.1). The counter and its last error are now cleared on every
   successful (re)connection, on the same path that logs “Wing connected”.
-=======
 - **“Wing USB” indicator and Bridge banner lied when no firmware file was
   imported but the wing was running** (firmware kept in RAM by its power-only
   USB plug; seen on 2026-11-12 on Windows: 30 Hz loop, “operational … no
@@ -33,7 +31,6 @@ the project aims for [semantic versioning](https://semver.org/).
   the “can't start” alert is kept. Display only, no change to the connection
   logic. Guarded by smoke check 23 (f), which runs the decision in node for
   both states.
->>>>>>> theirs
 
 ## [1.0.1] — 2026-11-12
 
