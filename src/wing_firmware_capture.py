@@ -140,6 +140,31 @@ _ANNULER = threading.Event()
 # d'abandonner PROPREMENT (message actionnable, reprise en recliquant).
 TIMEOUT_ATTENTE_MA2   = 300.0    # « lance grandMA2 onPC »
 TIMEOUT_DEBRANCHEMENT = 120.0    # « débranche ta wing »
+
+# Étape 2 (« Débranche ta wing ») : nombre d'échantillons CONSÉCUTIFS « wing
+# absente » (sondés à 1 s d'intervalle) exigés avant de tenir la wing pour
+# réellement débranchée — 6 sondes d'affilée = absence vue pendant 5 s.
+#
+# Pourquoi pas 1 (l'ancien comportement) : un seul échantillon ne distingue pas
+# un débranchement d'une RÉ-ÉNUMÉRATION. Quand grandMA2 onPC pousse le
+# firmware, la wing quitte le bus ~1,3 s avant de réapparaître (mesuré,
+# docs/HARDWARE.md « Init à froid », étape 6) ; et une wing coincée en
+# bootloader décroche seule du bus pendant ses reboots. Sur l'Asus le
+# 12/11/2026, l'étape 2 a avancé SANS débranchement — hypothèse (non prouvée,
+# pas de trace USB) : une telle ré-énumération prise pour un retrait.
+#
+# Pourquoi 5 s : c'est LE seuil déjà éprouvé par la boucle USB pour la même
+# question « la wing est-elle vraiment partie ? » — `ABSENCE_REELLE_S = 5.0`
+# dans wing_ui.py (lu par wing_connexion.py près de `autodemarrage_tardif`) :
+# en dessous, c'est la wing qui décroche seule pendant un reboot ; une coupure
+# humaine dure bien plus de 5 s. Deux seuils différents pour la même question
+# seraient une incohérence à expliquer plus tard. La valeur est RECOPIÉE ici
+# plutôt qu'importée : ce module ne charge pas wing_ui au niveau module (il
+# doit s'importer léger, sur toute plateforme) ; le test de fumée (section 49)
+# vérifie que (6 − 1) × 1 s ≥ wing_ui.ABSENCE_REELLE_S, pour que les deux ne
+# dérivent pas l'un de l'autre en silence. 5 s restent courtes devant les 10 s
+# pendant lesquelles l'étape 2 est tenue à l'écran (_PHASE_TENIR).
+ABSENCE_DURABLE_ECHANTILLONS = 6
 TIMEOUT_FERMER_MA2    = 180.0    # « ferme grandMA2 onPC »
 TIMEOUT_REBRANCHER    = 120.0    # « rebranche ta wing »
 TIMEOUT_CONNEXION     = 60.0     # attente de « Wing connectée » par usb_loop
@@ -289,28 +314,50 @@ def _archiver_diagnostic(run_dir: Path):
          tailles=(", ".join(tailles) if tailles else _L("firmware.aucun_pcap")))
 
 
-def _attendre(cond, timeout_s: float, intervalle: float = 1.0) -> bool:
+def _attendre(cond, timeout_s: float, intervalle: float = 1.0,
+              consecutifs: int = 1) -> bool:
     """Sonde `cond` jusqu'à ce qu'elle rende vrai, ou expiration. Rend bool.
 
     Sert aux étapes 1 et 2 de l'assistant : on laisse l'utilisateur agir
     (lancer grandMA2 onPC, débrancher la wing) et la détection fait avancer
     l'étape toute seule dès que c'est fait.
 
+    `consecutifs` : nombre de sondes `cond()` vraies D'AFFILÉE exigées (1 par
+    défaut = le premier vrai suffit). Un échantillon faux — ou une exception —
+    remet la série à zéro. Sert à exiger une condition DURABLE (étape 2 : la
+    wing absente du bus pendant plusieurs secondes, pas un clignement).
+
     Rend `False` IMMÉDIATEMENT si l'utilisateur a demandé l'annulation
     (`_ANNULER`) : l'appelant vérifie alors `_ANNULER` et prend le chemin
     d'arrêt propre plutôt que le message d'échec d'un timeout.
     """
     fin = time.time() + timeout_s
+    vus = 0                      # sondes vraies consécutives
     while time.time() < fin:
         if _ANNULER.is_set():
             return False
         try:
-            if cond():
-                return True
+            vrai = bool(cond())
         except Exception:
-            pass
+            vrai = False
+        vus = vus + 1 if vrai else 0
+        if vus >= consecutifs:
+            return True
         time.sleep(intervalle)
     return False
+
+
+def wing_absente_durablement(timeout_s: float, intervalle: float = 1.0) -> bool:
+    """Étape 2 : la wing est-elle PARTIE du bus — pour de bon ?
+
+    Vrai seulement après ABSENCE_DURABLE_ECHANTILLONS sondes « absente »
+    consécutives (voir la constante pour la justification : une
+    ré-énumération de ~1,3 s ne doit pas passer pour un débranchement).
+    Faux sur expiration ou annulation (`_ANNULER`), comme _attendre().
+    """
+    return _attendre(lambda: not wing_sur_bus(), timeout_s,
+                     intervalle=intervalle,
+                     consecutifs=ABSENCE_DURABLE_ECHANTILLONS)
 
 
 def annuler_capture() -> dict:
@@ -767,11 +814,16 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
         _phase(2, "firmware.phase.2.titre", "firmware.phase.2.etape")
         if wing_sur_bus():
             _etape("firmware.etape.debranche_wing")
-            if not _attendre(lambda: not wing_sur_bus(), TIMEOUT_DEBRANCHEMENT):
-                if _ANNULER.is_set():
-                    return _annule_resultat()
-                return _echec(_L("firmware.echec.wing_branchee"))
-            time.sleep(1.0)   # laisser l'énumération USB se stabiliser
+        # ⚠️ Absence DURABLE exigée (ABSENCE_DURABLE_ECHANTILLONS sondes
+        # d'affilée), et TOUJOURS, même si la wing paraît déjà absente : un
+        # échantillon isolé ne prouve rien. Asus, 12/11/2026 (tentative 1) :
+        # l'étape 2 a avancé sans aucun débranchement, puis « wing revue sur le
+        # bus » — un seul échantillon « absente » suffisait alors. Cette attente
+        # remplace l'ancien `sleep(1.0)` « laisser l'énumération se stabiliser ».
+        if not wing_absente_durablement(TIMEOUT_DEBRANCHEMENT):
+            if _ANNULER.is_set():
+                return _annule_resultat()
+            return _echec(_L("firmware.echec.wing_branchee"))
         _etape("firmware.etape.wing_debranchee")
         if _ANNULER.is_set():        # annulée avant toute élévation : rien à nettoyer
             return _annule_resultat()

@@ -118,6 +118,90 @@ def test_firmware_capture():
             else:
                 echec("une détection d'étape ne rend pas un bool",
                       f"gma2_onpc_lance→{d1!r}, wing_sur_bus→{d2!r}")
+
+    # ── Étape 2 : une absence DURABLE, pas un clignement (Asus, 12/11/2026) ──
+    # Tentative 1 sur l'Asus : « Débranche ta wing » a avancé SANS aucun
+    # débranchement, puis « wing revue sur le bus ». Un seul échantillon
+    # « absente » suffisait — or une ré-énumération (firmware poussé par
+    # grandMA2 onPC) sort la wing du bus ~1,3 s (docs/HARDWARE.md). On simule
+    # wing_sur_bus() rendant T, F, T, T puis F×n : l'étape ne doit PAS avancer
+    # sur le F isolé, et DOIT avancer sur la série. Timeout et annulation
+    # doivent rester respectés.
+    # Le seuil est ALIGNÉ sur celui de la boucle USB pour la même question
+    # (wing_ui.ABSENCE_REELLE_S = 5 s) : la constante est recopiée dans
+    # wing_firmware_capture (pas d'import de wing_ui au niveau module), c'est
+    # donc ICI qu'on empêche les deux de dériver l'une de l'autre.
+    # Réinjection : passer `consecutifs=1` dans wing_absente_durablement() (ou
+    # ABSENCE_DURABLE_ECHANTILLONS = 1) fait retomber ce contrôle à ROUGE.
+    import inspect as _inspect
+    import wing_ui as _core
+    if not callable(getattr(fwc, "wing_absente_durablement", None)) \
+            or not hasattr(fwc, "ABSENCE_DURABLE_ECHANTILLONS"):
+        echec("l'étape 2 n'exige plus une absence durable de la wing",
+              "attendu : wing_absente_durablement() + ABSENCE_DURABLE_ECHANTILLONS")
+    elif (fwc.ABSENCE_DURABLE_ECHANTILLONS - 1) * 1.0 < _core.ABSENCE_REELLE_S:
+        echec("l'étape 2 exige une absence plus courte que la boucle USB (incohérence)",
+              f"ABSENCE_DURABLE_ECHANTILLONS = {fwc.ABSENCE_DURABLE_ECHANTILLONS!r} "
+              f"→ {fwc.ABSENCE_DURABLE_ECHANTILLONS - 1} s à 1 Hz, "
+              f"< wing_ui.ABSENCE_REELLE_S = {_core.ABSENCE_REELLE_S} s")
+    else:
+        n = fwc.ABSENCE_DURABLE_ECHANTILLONS
+        sauv_bus = fwc.wing_sur_bus
+        try:
+            # A — présente, UN clignement, présente ×2, puis absence franche.
+            seq = [True, False, True, True] + [False] * n
+            vus = []
+            def faux_bus():
+                v = seq[len(vus)] if len(vus) < len(seq) else False
+                vus.append(v)
+                return v
+            fwc.wing_sur_bus = faux_bus
+            fwc._ANNULER.clear()
+            r_serie = fwc.wing_absente_durablement(5.0, intervalle=0.01)
+            sondes = len(vus)
+            # B — clignements perpétuels (T, F, T, F…) : jamais validé → timeout.
+            compteur = []
+            def clignote():
+                compteur.append(1)
+                return len(compteur) % 2 == 1
+            fwc.wing_sur_bus = clignote
+            r_clignote = fwc.wing_absente_durablement(0.3, intervalle=0.01)
+            # C — annulation demandée : False tout de suite, wing absente ou pas.
+            fwc.wing_sur_bus = lambda: False
+            fwc._ANNULER.set()
+            r_annule = fwc.wing_absente_durablement(5.0, intervalle=0.01)
+        finally:
+            fwc.wing_sur_bus = sauv_bus
+            fwc._ANNULER.clear()
+        attendu = len(seq)
+        if r_serie is not True or sondes != attendu:
+            echec("l'étape 2 valide le débranchement sur un échantillon « absente » isolé",
+                  f"wing_sur_bus() sondée {sondes}× (attendu {attendu} : T, F, T, T "
+                  f"puis F×{n}), rendu {r_serie!r}")
+        elif r_clignote is not False:
+            echec("l'étape 2 valide le débranchement sur des clignements perpétuels",
+                  f"rendu {r_clignote!r} au lieu de False (timeout)")
+        elif r_annule is not False:
+            echec("wing_absente_durablement() ignore l'annulation (_ANNULER)",
+                  f"rendu {r_annule!r}")
+        else:
+            ok(f"étape 2 : un échantillon « absente » isolé n'avance pas, {n} d'affilée "
+               f"(≈{n - 1} s à 1 Hz, ≥ ABSENCE_REELLE_S = {_core.ABSENCE_REELLE_S} s) "
+               "oui ; clignements → timeout ; annulation respectée")
+        # Garde STATIQUE : le bloc étape 2 de capturer_firmware passe bien par le
+        # helper (un retour à `_attendre(lambda: not wing_sur_bus(), …)` nu, un
+        # seul échantillon, serait le bug de l'Asus réintroduit).
+        try:
+            src_cap = _inspect.getsource(fwc.capturer_firmware)
+            bloc2 = src_cap.split("Étape 2/7", 1)[1].split("Étape 3/7", 1)[0]
+        except (IndexError, OSError, TypeError):
+            bloc2 = ""
+        if "wing_absente_durablement(" not in bloc2 \
+                or "_attendre(lambda: not wing_sur_bus()" in bloc2:
+            echec("capturer_firmware (étape 2) ne passe pas par wing_absente_durablement()",
+                  "le bloc « Étape 2/7 » doit appeler le helper, jamais _attendre() nu")
+        else:
+            ok("capturer_firmware (étape 2) passe par wing_absente_durablement()")
     # ── Garde d'architecture : Windows x64 seulement, PAS Windows ARM ───────
     # USBPcap (pilote-filtre noyau) et grandMA2 onPC n'existent qu'en x64.
     # capture_supportee() sert à l'UI pour MASQUER la carte — un faux positif

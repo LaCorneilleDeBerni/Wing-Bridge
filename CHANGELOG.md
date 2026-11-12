@@ -17,6 +17,19 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Fixed
 
+- **Firmware capture, step 2 (“Unplug your wing”) could move on without an
+  unplug**: a single “not on the bus” sample was taken as an unplug, while a
+  wing re-enumerating (firmware pushed by grandMA2 onPC) or rebooting in
+  bootloader drops off the bus by itself for a moment. The step now requires
+  the wing to be absent for 5 s in a row (the same threshold the USB loop
+  uses), and step 1 now says to unplug the wing **before** launching grandMA2
+  onPC. Not yet tested on a Windows machine.
+- Firmware capture log no longer says “no usable transfer — stopping the
+  capture” right before a successful extraction; the “no transfer” failure
+  message now names the likely cause first (wing not unplugged / transfer
+  before the recording started), and “Wing in bootloader … unplug” now says
+  the wing may still finish starting on its own (~30 s) before asking to
+  unplug. Text only.
 - The Bridge dot's “N DMX/LED write(s) refused by the wing” warning was never
   reset: after a firmware capture it kept showing `[Errno 19] No such device`
   while the wing was back and healthy, until the engine was restarted (known

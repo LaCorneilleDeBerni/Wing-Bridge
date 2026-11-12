@@ -682,6 +682,29 @@ a donc commencé après le transfert.
   l'étape 7 « ✗ Wing en bootloader… débranche » suivi la même seconde de
   « ↻ auto-démarrage tardif… reprise ».
 
+**Corrigé sur la branche `correctifs-v1.0.2` (13/11/2026), NON testé sur une
+vraie machine Windows** : l'étape 2 exige désormais une absence **durable** —
+`ABSENCE_DURABLE_ECHANTILLONS = 6` sondes consécutives « absente » à 1 s
+d'intervalle (5 s : le **même seuil** que la boucle USB, `ABSENCE_REELLE_S =
+5.0` dans `wing_ui.py`, pour la même question « la wing est-elle vraiment
+partie ? » — et bien plus que la ré-énumération de ~1,3 s mesurée dans
+`HARDWARE.md`), via `wing_absente_durablement()` (`_attendre()` a gagné un
+paramètre générique `consecutifs`, les autres appels sont inchangés). La valeur
+est recopiée, pas importée (pas de `wing_ui` au niveau module) : le contrôle 49
+refuse qu'elle passe sous `ABSENCE_REELLE_S`. L'attente
+est faite **même si la wing paraît déjà absente** au premier coup d'œil, et
+remplace l'ancien `sleep(1.0)` de stabilisation. La consigne de l'étape 1 fait
+maintenant **débrancher la wing avant** de lancer grandMA2 onPC
+(`firmware.phase.1.titre`, `firmware.etape.ma2_absent`, fr + en). Le contrôle
+49 du test de fumée simule `wing_sur_bus()` rendant T, F, T, T puis F×6 et
+vérifie que le F isolé n'avance pas, que la série avance, que les
+clignements perpétuels expirent et que l'annulation coupe net — vu ROUGE par
+réinjection (`consecutifs=1`, puis appel `_attendre()` nu), puis vert. Ce que
+ça prouve : le code ne valide plus un échantillon isolé. Ce que ça ne prouve
+PAS : que c'était bien la cause sur l'Asus (hypothèse ci-dessus, toujours sans
+trace USB) — à confirmer à la prochaine capture réelle. Les deux messages
+listés juste au-dessus ne sont pas touchés.
+
 La **2ᵉ tentative a réussi** : 2 interfaces enregistrées, firmware 34 624 o
 (sha256 confirmé) mis en cache, USBPcap retiré (`uninstall_ok=True`), wing
 reconnectée à 31,3 Hz.
