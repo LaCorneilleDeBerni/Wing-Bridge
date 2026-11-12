@@ -279,6 +279,17 @@ hardware you use alongside Wing Bridge.
   and use the manual fallback — capture with Wireshark (which bundles
   USBPcap) while grandMA2 onPC pushes the firmware, then *Settings →
   Configure the firmware → Import a capture*. See `docs/WINDOWS.md`.
+- **Known issue — the capture assistant can skip “Unplug your wing”.** Seen
+  once: a wing sitting in bootloader briefly drops off the bus on its own, the
+  assistant takes that for an unplug, and grandMA2 onPC pushes the firmware
+  before the recording starts. Tip: **unplug the wing before you launch
+  grandMA2 onPC**, then follow the steps. A second attempt succeeds.
+- **All dots grey (“…”) and an empty log on a Windows PC that has been “shut
+  down” but not restarted for weeks.** Windows can stop recycling closed
+  connections on the local port 8765 until nothing can listen there any more
+  (even an older Wing Bridge build). Use *Start → Power → **Restart*** — with
+  Fast Startup enabled, *Shut down* keeps the broken state. Details in
+  `docs/WINDOWS.md`.
 - **Encoder wheels**: configured per profile. Partial detection of grandMA3's
   current selection works, but full automatic following is not there yet.
 - **Not notarised (no paid Apple account).** The macOS app is ad-hoc signed;

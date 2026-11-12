@@ -645,9 +645,46 @@ risque de régression pour tout le monde. Le diff est conservé en
 **Ce qui est fait à la place** : « bug connu » dans `README.md` et
 `CHANGELOG.md` avec le repli manuel ci-dessous ; et, sur la branche
 `correctifs-v1.0.1`, une limite de temps + un `Write-Status` avant chacune des
-trois attentes, pour que le prochain échec dise OÙ il bloque. Détail dans la
-section « Capture : attentes bornées » une fois cette partie testée sur une
-vraie machine Windows.
+trois attentes, pour que le prochain échec dise OÙ il bloque. Exécuté sur
+l'Asus le 12/11/2026 : voir la section suivante.
+
+### Attentes bornées : exécutées sur l'Asus le 12/11/2026 — et un défaut de l'étape 2
+
+Le commit `92c0ac0` (limite de temps + `Write-Status` avant chaque attente du
+script élevé, dernière étape du script dans la ligne d'échec) a tourné sur
+l'Asus (build #253) : la ligne d'échec porte bien
+`last_script_step=“terminé”`. **Ça prouve que le code s'exécute, pas qu'il
+aurait sauvé le Dell** : sur l'Asus le script ne s'est jamais figé.
+
+**Défaut constaté le même jour (tentative 1, échouée)** : l'étape 2
+« Débranche ta wing » a avancé **sans aucun débranchement** — grandMA2 onPC
+lancé à 03:16:02, étape 2 à 03:16:03, étape 3 dix secondes plus tard, puis
+« wing revue sur le bus » alors qu'elle n'était jamais partie. L'enregistrement
+a donc commencé après le transfert.
+
+- Dans le code : `_attendre(lambda: not wing_sur_bus(), TIMEOUT_DEBRANCHEMENT)`
+  sonde une fois par seconde et **un seul échantillon « absente » suffit**.
+  Or la boucle USB (`wing_connexion.py`, commentaire près de
+  `autodemarrage_tardif`) sait qu'« une wing coincée en bootloader décroche
+  seule du bus ~10 s pendant ses reboots » et exige, elle, une absence
+  **durable**.
+- **Hypothèse** (cohérente avec la chronologie, **non prouvée** — pas de
+  trace USB de cette tentative) : la wing était branchée en bootloader quand
+  onPC a démarré ; onPC lui a poussé le firmware aussitôt ; la
+  ré-énumération qui suit a été prise pour un débranchement.
+- Correctif candidat (branche suivante) : exiger n échantillons consécutifs
+  d'absence (2-3 s) avant de valider l'étape 2, et faire **débrancher la
+  wing avant** de lancer grandMA2 onPC dans la consigne de l'étape 1.
+- Deux messages à corriger en même temps : l'échec dit « vérifie que grandMA2
+  onPC tourne » (hors sujet ici) ; en cas de **succès**, le journal écrit
+  « sans transfert exploitable — arrêt de la capture » (fenêtre de grâce)
+  juste avant « blob valide extrait » (dernière passe d'extraction), puis à
+  l'étape 7 « ✗ Wing en bootloader… débranche » suivi la même seconde de
+  « ↻ auto-démarrage tardif… reprise ».
+
+La **2ᵉ tentative a réussi** : 2 interfaces enregistrées, firmware 34 624 o
+(sha256 confirmé) mis en cache, USBPcap retiré (`uninstall_ok=True`), wing
+reconnectée à 31,3 Hz.
 
 ### Repli manuel (Wireshark)
 
@@ -663,6 +700,64 @@ distinctes, ni l'une ni l'autre GPLv3). Détail dans `THIRD_PARTY.md` et
 `src/vendor/usbpcap/README.md`.
 
 ---
+
+## Port 8765 saturé : `TIME_WAIT` figés et démarrage rapide (Asus, 12/11/2026)
+
+**Symptôme** : toutes les pastilles sur « … », journal vide, **y compris avec
+la v1.0.0 téléchargée de GitHub** ; une instance relancée se fige après
+« OSC → » et rien n'écoute sur 8765. Ce n'était pas l'app : c'était le PC.
+
+**Mesuré** (PowerShell, session Claude Code sur l'Asus) :
+
+- **16 058 connexions `TIME_WAIT` sur 127.0.0.1:8765**, soit toute la plage
+  de ports dynamiques 49152-65534 ; le compte **ne baissait plus** (stable
+  plus de 5 min après l'arrêt de tous les processus) ;
+- uptime réel : **73 jours** (dernier démarrage le 31/08), aucun réglage TCP
+  surchargé dans le registre ;
+- un premier « redémarrage » n'a rien changé : `LastBootUpTime` toujours au
+  31/08. Alex avait fait **Arrêter** : avec le **démarrage rapide** (Fast
+  Startup, activé par défaut), Windows met le noyau en veille prolongée et
+  **restaure l'état TCP** au rallumage. D'où « éteint plusieurs fois » et
+  « 73 jours sans redémarrage » vrais en même temps ;
+- après un vrai **Redémarrer** (boot 12/11 02:04:56) : port vide ; avec la
+  v1.0.0 seule, `TIME_WAIT` 0 → 609 → 1 177 → 1 649 → 2 104 puis **plateau
+  ~2 000** de t+180 s à t+820 s (le recyclage fonctionne) ; toutes les
+  pastilles vertes.
+
+**Pourquoi autant de connexions** : le serveur est un `ThreadingHTTPServer`
+sans `protocol_version` (`wing_ui.py:1495`) ⇒ **HTTP/1.0, une connexion TCP
+par requête**, et l'interface interroge `/api/status` toutes les 400 ms
+(`ui/init.js:102`) — plus `/api/dmx` toutes les 300 ms dans l'onglet
+Paramètres seulement. Le plateau mesuré (~2 000) suggère pourtant ~17
+connexions/s si le délai `TIME_WAIT` est bien de 120 s (valeur **non
+vérifiée** sur cette machine), contre 2,5-6/s attendues ; la session de
+mesure interrogeait elle-même l'API. **Écart non expliqué, non bloquant.**
+Candidat pour une branche future : `protocol_version = "HTTP/1.1"` (keep-alive
+— impose un `Content-Length` exact sur TOUTES les réponses, à auditer avant).
+
+**Diagnostic en 2 commandes** (PowerShell, sans élévation) :
+
+```powershell
+(Get-CimInstance Win32_OperatingSystem).LastBootUpTime        # date du VRAI dernier démarrage
+(netstat -ano | findstr ":8765" | findstr "TIME_WAIT" | Measure-Object).Count
+```
+
+Date de boot vieille de semaines + compte proche de 16 000 ⇒ ports épuisés.
+
+**Remède** : un **vrai redémarrage** — Démarrer → Marche/Arrêt → **Redémarrer**,
+ou `shutdown /r /t 0`. « Arrêter » ne suffit **pas** tant que le démarrage
+rapide est actif. Sur une machine de régie, le désactiver (Panneau de
+configuration → Options d'alimentation → « Choisir l'action des boutons
+d'alimentation » → décocher « Activer le démarrage rapide » ; non testé ici,
+recommandation).
+
+⛔ Pour qui diagnostique à distance : **ne jamais croire « j'ai redémarré »
+sans la date de boot**. Une session Claude Code qui survit au « redémarrage »
+est à elle seule la preuve qu'il n'a pas eu lieu.
+
+**Où est le dépôt sur l'Asus** : `C:\Users\berni\Documents\Wing Bridge\Wing-Bridge`
+(sous-dossier `Wing-Bridge\`), remote **`origin`** = dépôt public GitHub (sur
+le Mac le même remote s'appelle `public`).
 
 ## Bug Windows trouvé par le smoke test : `os.replace()` n'est pas `rename(2)`
 

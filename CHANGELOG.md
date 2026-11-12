@@ -33,6 +33,28 @@ the project aims for [semantic versioning](https://semver.org/).
   7590, Windows 11 Pro: every attempt stalled at step 3 then failed with no
   interface detected). Cause not established. Workaround: manual Wireshark
   capture + *Import a capture*. See `README.md`, “Known limitations”.
+- **Capture assistant, step 2 (“Unplug your wing”) can move on without an
+  unplug** (seen once, 2026-11-12): a single “not on the bus” sample is taken
+  as an unplug, while a wing in bootloader drops off the bus by itself for a
+  few seconds. If grandMA2 onPC pushes the firmware before the recording
+  starts, the capture fails with a misleading “check grandMA2 onPC is
+  running” message. Workaround: **unplug the wing before launching grandMA2
+  onPC**, then follow the steps; a second attempt succeeded.
+- On a successful capture the log can still say “no usable transfer —
+  stopping the capture” right before “valid firmware blob extracted”, and
+  “Wing in bootloader … unplug then replug” right before “Late auto-start …
+  resumed”. Read the last line, not the first.
+- The Bridge dot's “N DMX/LED write(s) refused by the wing” warning is never
+  reset; it stays until the engine is restarted even after a clean reconnect.
+- The Wing USB dot can say the wing “cannot start until a firmware is
+  imported” while the wing is actually running (firmware kept in RAM by its
+  power-only USB socket): it checks the file, not the wing.
+- **All status dots grey (“…”) with an empty log, on a PC that has not been
+  truly restarted for weeks**: Windows had stopped recycling `TIME_WAIT`
+  connections on port 8765 (16 058 of them, the whole dynamic port range) and
+  even v1.0.0 could not listen. Fix: **Restart**, not *Shut down* — Fast
+  Startup turns *Shut down* into a kernel hibernate that keeps the broken
+  TCP state. See `docs/WINDOWS.md`, “Port 8765 saturé”.
 
 ## [1.0.0] — 2026-09-27
 
