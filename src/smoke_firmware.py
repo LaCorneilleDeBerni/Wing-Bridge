@@ -243,6 +243,136 @@ def test_firmware_capture():
             ok("annuler la démarche : route + drapeau _ANNULER, no-op si rien "
                "en cours, arrêt propre demandé sinon")
 
+    _controle_messages_capture(fwc)
+
+
+def _controle_messages_capture(fwc):
+    """Les messages de la capture ne se contredisent plus (Asus, 12/11/2026).
+
+    Trois constats sur un journal réel, trois promesses :
+      (1) la fenêtre de grâce ne CONCLUT pas avant la dernière passe
+          d'extraction : le bloc vient APRÈS l'extraction dans la boucle, se
+          signale UNE fois, et son texte annonce ce qui se passe (arrêt
+          demandé, extraction qui continue) — plus « sans transfert
+          exploitable — arrêt de la capture » suivi de « blob valide extrait » ;
+      (2) la raison d'un échec « aucun transfert » est choisie d'après ce que
+          la capture a VU (`_cle_aucun_transfert`, fonction pure) : wing déjà
+          sur le bus à l'ouverture de l'enregistrement d'abord, grandMA2 onPC
+          en dernier — plus « vérifie que grandMA2 onPC tourne » alors qu'il
+          tournait ;
+      (3) à la reprise (étape 7), « firmware pas démarré » dit que la wing
+          peut encore démarrer seule AVANT de faire débrancher — plus
+          « débranche » suivi la même seconde de « auto-démarrage tardif ».
+    Réinjection : remettre l'ancien ordre / l'ancienne clé / l'un des anciens
+    textes fait retomber le sous-contrôle correspondant à ROUGE (vérifié le
+    13/11/2026, voir docs/WINDOWS.md).
+    """
+    import inspect
+    import json
+    import re as _re
+    try:
+        fr = json.loads((HERE / "locales" / "fr.json").read_text(encoding="utf-8"))
+        en = json.loads((HERE / "locales" / "en.json").read_text(encoding="utf-8"))
+    except Exception as e:
+        echec("catalogues fr/en illisibles pour le contrôle des messages de capture",
+              f"{type(e).__name__}: {e}")
+        return
+    src = inspect.getsource(fwc.capturer_firmware)
+
+    # ── (1) fenêtre de grâce : après l'extraction, une fois, texte honnête ──
+    cle_grace = "journal.fw.capture_fenetre_ecoulee"
+    i_ext = src.find("extract_from_pcapng")
+    i_grace = src.find(cle_grace)
+    une_fois = _re.search(
+        r"if not grace_signalee:\s*\n\s*grace_signalee = True\s*\n\s*_log\(\s*\""
+        + _re.escape(cle_grace), src)
+    ancienne = "journal.fw.capture_sans_transfert"
+    if ancienne in src or ancienne in fr or ancienne in en:
+        echec("la fenêtre de grâce annonce encore « sans transfert — arrêt de la "
+              "capture » (clé journal.fw.capture_sans_transfert)",
+              "ce message précédait « blob valide extrait » sur l'Asus le 12/11/2026")
+    elif i_grace < 0 or cle_grace not in fr or cle_grace not in en:
+        echec("clé journal.fw.capture_fenetre_ecoulee absente (code ou catalogues)")
+    elif i_ext < 0 or i_ext > i_grace:
+        echec("la fenêtre de grâce conclut AVANT la passe d'extraction du tour",
+              f"extract_from_pcapng à {i_ext}, {cle_grace} à {i_grace} — "
+              "l'extraction doit précéder")
+    elif not une_fois:
+        echec("la fenêtre de grâce n'est pas signalée UNE seule fois",
+              "attendu : `if not grace_signalee: grace_signalee = True; _log(…)`")
+    elif any(mot in fr[cle_grace] for mot in ("sans transfert", "arrêt de la capture")) \
+            or "continue" not in fr[cle_grace]:
+        echec("le texte fr de la fenêtre de grâce conclut encore (ou ne dit pas "
+              "que l'extraction continue)", fr[cle_grace])
+    elif "no usable transfer" in en[cle_grace] or "keeps running" not in en[cle_grace]:
+        echec("le texte en de la fenêtre de grâce conclut encore", en[cle_grace])
+    else:
+        ok("(1) fenêtre de grâce : après l'extraction, signalée une fois, "
+           "texte qui ne conclut pas avant le verdict")
+
+    # ── (2) raison d'échec « aucun transfert » : d'après ce qui a été vu ─────
+    f = getattr(fwc, "_cle_aucun_transfert", None)
+    cas = [
+        # (enregistrement_ouvert, wing_deja_la, wing_vue, ma2_tourne) → clé
+        ((True, True, True, True), "firmware.echec.aucun_transfert_wing_deja_la"),
+        ((True, True, True, False), "firmware.echec.aucun_transfert_wing_deja_la"),
+        ((True, False, False, True), "firmware.echec.aucun_transfert_wing_jamais_vue"),
+        ((True, False, True, False), "firmware.echec.aucun_transfert_ma2_ferme"),
+        ((True, False, True, True), "firmware.echec.aucun_transfert"),
+        ((False, None, False, False), "firmware.echec.aucun_transfert"),
+    ]
+    gen_fr = fr.get("firmware.echec.aucun_transfert", "")
+    gen_en = en.get("firmware.echec.aucun_transfert", "")
+    if not callable(f):
+        echec("wing_firmware_capture._cle_aucun_transfert absente",
+              "la raison d'échec doit être choisie d'après ce que la capture a vu")
+    elif "_cle_aucun_transfert(" not in src:
+        echec("capturer_firmware() n'utilise pas _cle_aucun_transfert()")
+    else:
+        faux = [f"{args} → {f(*args)!r} (attendu {att!r})"
+                for args, att in cas if f(*args) != att]
+        manque = [k for _, k in cas if k not in fr or k not in en]
+        if faux:
+            echec("_cle_aucun_transfert() se trompe de message", " ; ".join(faux))
+        elif manque:
+            echec("clé(s) d'échec « aucun transfert » absente(s) des catalogues",
+                  ", ".join(sorted(set(manque))))
+        elif "Vérifie que grandMA2 onPC tourne" in gen_fr \
+                or "AVANT de lancer grandMA2" not in gen_fr:
+            echec("le message générique fr envoie encore vérifier grandMA2 onPC en "
+                  "premier (ou ne dit pas de débrancher AVANT de le lancer)", gen_fr)
+        elif "Check that grandMA2 onPC is running" in gen_en \
+                or "BEFORE launching grandMA2" not in gen_en:
+            echec("le message générique en envoie encore vérifier grandMA2 onPC en "
+                  "premier", gen_en)
+        elif "AVANT de lancer grandMA2" not in fr["firmware.echec.aucun_transfert_wing_deja_la"]:
+            echec("le message « wing déjà là » ne dit pas de débrancher AVANT de "
+                  "lancer grandMA2 onPC")
+        else:
+            ok(f"(2) raison « aucun transfert » : {len(cas)} cas vus → bonne clé ; "
+               "textes fr/en : débrancher AVANT grandMA2 onPC d'abord, onPC en dernier")
+
+    # ── (3) étape 7 : « peut encore démarrer seule » AVANT « débranche » ────
+    k_bl, k_susp = "journal.init.bootloader_fw_pas_demarre", "journal.wing.suspendu"
+    t_fr, t_en = fr.get(k_bl, ""), en.get(k_bl, "")
+    i_fr_auto, i_fr_deb = t_fr.find("toute seule"), t_fr.lower().find("débranche")
+    i_en_auto, i_en_deb = t_en.find("on its own"), t_en.lower().find("unplug")
+    if i_fr_auto < 0 or i_fr_deb < 0 or i_fr_auto > i_fr_deb:
+        echec("fr : « Wing en bootloader » fait débrancher sans dire d'abord que "
+              "la wing peut encore démarrer seule",
+              f"{t_fr} — sur l'Asus, « auto-démarrage tardif… reprise » suivait "
+              "la même seconde")
+    elif i_en_auto < 0 or i_en_deb < 0 or i_en_auto > i_en_deb:
+        echec("en : « Wing in bootloader » makes you unplug before saying it may "
+              "still boot on its own", t_en)
+    elif "seule" not in fr.get(k_susp, "") or "itself" not in en.get(k_susp, ""):
+        echec("« Tentatives suspendues » ne dit pas qu'elles reprennent aussi si la "
+              "wing finit de démarrer seule", fr.get(k_susp, ""))
+    else:
+        ok("(3) étape 7 : « peut encore démarrer seule (~30 s) » précède "
+           "« débranche » (fr + en), « suspendues » le dit aussi")
+
+
 _FIXTURES = HERE / "fixtures"
 
 

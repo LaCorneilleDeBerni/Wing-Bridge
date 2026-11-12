@@ -686,6 +686,42 @@ La **2ᵉ tentative a réussi** : 2 interfaces enregistrées, firmware 34 624 o
 (sha256 confirmé) mis en cache, USBPcap retiré (`uninstall_ok=True`), wing
 reconnectée à 31,3 Hz.
 
+**Les trois messages, corrigés le 13/11/2026 (branche `correctifs-v1.0.2`,
+non testé sur Windows — vérifié par le contrôle `test_firmware_capture`,
+sous-contrôle « messages de la capture », vu rouge par réinjection de chacun
+des anciens textes/ordres puis vert) :**
+
+- **Fenêtre de grâce** (`wing_firmware_capture.py`, boucle de
+  `capturer_firmware`) : le bloc vient maintenant **après** la passe
+  d'extraction du tour, s'écrit **une seule fois** (drapeau
+  `grace_signalee` — avant, la ligne repartait à chaque tour de 1 s jusqu'à
+  la confirmation d'arrêt du script élevé : établi par lecture du code, nombre
+  réel non mesuré), et la clé `journal.fw.capture_fenetre_ecoulee` dit ce qui
+  se passe : « arrêt de l'enregistrement demandé — l'extraction continue
+  jusqu'à la fin de l'enregistrement, le verdict vient après ». `stop.flag`
+  et délais **inchangés**.
+- **Échec « aucun transfert »** : la raison est choisie par
+  `_cle_aucun_transfert()` (fonction pure) d'après ce que l'étape 4 a **vu** —
+  un échantillon `wing_sur_bus()` pris à l'ouverture de l'étape 4
+  (`wing_deja_la`), la wing vue ou non pendant l'enregistrement, et
+  `gma2_onpc_lance()` au moment du verdict. Quatre textes fr/en :
+  `…_wing_deja_la` (le cas Asus : « débranche la wing AVANT de lancer
+  grandMA2 onPC »), `…_wing_jamais_vue`, `…_ma2_ferme`, et le générique
+  réécrit (wing pas vraiment débranchée / rebranchée trop tôt **d'abord**,
+  onPC **ensuite**). Deux lignes de journal en plus :
+  `journal.fw.capture_wing_deja_la` (dès l'ouverture de l'étape 4) et
+  `journal.fw.capture_echec_contexte` (au verdict). La logique de l'étape 2
+  (`_attendre`, lignes « Débranche ta wing ») n'est **pas** touchée ici.
+- **Étape 7, « bootloader, débranche »** : **texte seul**, aucune logique USB
+  modifiée. `journal.init.bootloader_fw_pas_demarre` dit désormais que la wing
+  « peut encore finir de démarrer toute seule (vu de ~7 s à plus de 25 s —
+  surveillance en cours) » et ne fait débrancher que « si rien ne bouge d'ici
+  ~30 s » ; `journal.wing.suspendu` ajoute « ou dès que la wing finit de
+  démarrer seule ». La surveillance existe bien (branche
+  `attend_rebranchement` d'`usb_loop`, section « Auto-démarrage tardif »
+  ci-dessus) ; différer réellement la consigne imposerait un horodatage dans
+  cette branche — **pas fait**, volontairement (voir le rapport du chantier).
+
 ### Repli manuel (Wireshark)
 
 Toujours conservé : installer Wireshark (qui propose USBPcap), capturer

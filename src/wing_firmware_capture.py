@@ -829,6 +829,18 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
         blob = None
         pcap_vus = []
         wing_vue_ts = None          # quand la wing est réapparue pendant l'étape 4
+        # ── Ce que l'étape 4 a VU — lecture seule, ne pilote rien ───────────
+        # `wing_deja_la` : la wing était DÉJÀ sur le bus à l'ouverture de
+        # l'enregistrement. Constat Asus 12/11/2026 : wing jamais débranchée,
+        # firmware poussé AVANT l'enregistrement → « aucun transfert », et
+        # l'ancien message envoyait vérifier grandMA2 onPC, qui tournait.
+        # `None` tant que l'étape 4 n'est pas ouverte. Sert UNIQUEMENT à
+        # choisir le message d'échec (`_cle_aucun_transfert`).
+        # `grace_signalee` : la fenêtre de grâce ne s'écrit qu'UNE fois au
+        # journal (sans ce drapeau, la ligne repartait à chaque tour de 1 s
+        # jusqu'à ce que le script élevé confirme l'arrêt).
+        wing_deja_la = None
+        grace_signalee = False
         deadline = time.time() + timeout_s + 60.0   # marge install + désinstall
         st = {}
         while time.time() < deadline:
@@ -850,31 +862,20 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                 if "capture en cours" in et and CAPTURE_STATE["phase"] < 4:
                     _phase(4, "firmware.phase.4.titre")
                     _log("journal.fw.capture_iface", et=et)
+                    # Un seul échantillon, pris une fois l'étape 4 affichée
+                    # (donc APRÈS le remontage des hubs du script élevé, et
+                    # avant que la consigne « branche ta wing » ait pu être
+                    # suivie). Wing présente ici = elle n'a pas été
+                    # (re)branchée pendant l'enregistrement.
+                    wing_deja_la = wing_sur_bus()
+                    if wing_deja_la:
+                        _log("journal.fw.capture_wing_deja_la")
                 if (blob is None and CAPTURE_STATE["phase"] == 4
                         and not st.get("termine")):
                     _etape("firmware.etape.wing_detectee" if wing_sur_bus()
                            else "firmware.etape.branche_wing")
                 elif CAPTURE_STATE["phase"] < 4 and et:
                     _etape(et)
-
-            # ── Marge après retour de la wing ───────────────────────────────
-            # Une fois la wing revue sur le bus pendant l'étape 4, on donne
-            # GRACE_APRES_WING_S à grandMA2 onPC pour pousser le firmware et à
-            # l'extraction pour trouver un blob. Passé ce délai sans rien :
-            # on arrête la capture proprement (stop.flag) plutôt que d'attendre
-            # le timeout complet — l'échec est déjà certain.
-            if (blob is None and CAPTURE_STATE["phase"] == 4
-                    and not st.get("termine")):
-                if wing_sur_bus():
-                    if wing_vue_ts is None:
-                        wing_vue_ts = time.time()
-                        _log("journal.fw.capture_fenetre", s=int(GRACE_APRES_WING_S))
-                    elif time.time() - wing_vue_ts > GRACE_APRES_WING_S:
-                        _log("journal.fw.capture_sans_transfert", s=int(GRACE_APRES_WING_S))
-                        try:
-                            stop_flag.write_text("stop", encoding="utf-8")
-                        except OSError:
-                            pass
 
             if blob is None:
                 for pf in pcap_vus:
@@ -894,6 +895,35 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                         except OSError:
                             pass
                         break
+
+            # ── Marge après retour de la wing ───────────────────────────────
+            # Une fois la wing revue sur le bus pendant l'étape 4, on donne
+            # GRACE_APRES_WING_S à grandMA2 onPC pour pousser le firmware et à
+            # l'extraction pour trouver un blob. Passé ce délai sans rien :
+            # on demande l'arrêt de la capture (stop.flag) plutôt que d'attendre
+            # le timeout complet.
+            # ⚠️ Ce bloc vient APRÈS la passe d'extraction, et son message ne
+            # conclut PAS : le verdict n'est pas acquis ici. Sur l'Asus le
+            # 12/11/2026, « sans transfert exploitable — arrêt de la capture »
+            # est sorti juste AVANT « blob valide extrait » — l'extraction
+            # continue tant que le script élevé n'a pas confirmé l'arrêt
+            # (`capture_finie`), et c'est cette dernière passe qui a trouvé le
+            # firmware. stop.flag et délais sont inchangés.
+            if (blob is None and CAPTURE_STATE["phase"] == 4
+                    and not st.get("termine")):
+                if wing_sur_bus():
+                    if wing_vue_ts is None:
+                        wing_vue_ts = time.time()
+                        _log("journal.fw.capture_fenetre", s=int(GRACE_APRES_WING_S))
+                    elif time.time() - wing_vue_ts > GRACE_APRES_WING_S:
+                        if not grace_signalee:
+                            grace_signalee = True
+                            _log("journal.fw.capture_fenetre_ecoulee",
+                                 s=int(GRACE_APRES_WING_S))
+                        try:
+                            stop_flag.write_text("stop", encoding="utf-8")
+                        except OSError:
+                            pass
 
             if st.get("termine") or st.get("capture_finie"):
                 # `capture_finie` : le script élevé a fini de capturer et ATTEND
@@ -946,7 +976,18 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                 CAPTURE_STATE["besoin_redemarrage"] = True
                 return _echec(st.get("erreur") or
                               _L("firmware.echec.besoin_redemarrage"))
-            raison = _L("firmware.echec.aucun_transfert") + residu
+            # Contexte de l'échec, pour le diagnostic après coup : ce que
+            # l'étape 4 a vu, et si grandMA2 onPC tourne encore à cet instant.
+            ma2_tourne = gma2_onpc_lance()
+            _log("journal.fw.capture_echec_contexte",
+                 deja=wing_deja_la,
+                 s=(int(time.time() - wing_vue_ts) if wing_vue_ts else "—"),
+                 ma2=ma2_tourne)
+            raison = _L(_cle_aucun_transfert(
+                enregistrement_ouvert=CAPTURE_STATE["phase"] >= 4,
+                wing_deja_la=wing_deja_la,
+                wing_vue=wing_vue_ts is not None,
+                ma2_tourne=ma2_tourne)) + residu
             erreur_script = st.get("erreur")
             if erreur_script:
                 raison = f"{erreur_script}{residu}"
@@ -1053,6 +1094,36 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                     pass
             shutil.rmtree(run_dir, ignore_errors=True)
         CAPTURE_STATE["actif"] = False
+
+
+def _cle_aucun_transfert(enregistrement_ouvert: bool, wing_deja_la,
+                         wing_vue: bool, ma2_tourne: bool) -> str:
+    """Clé i18n de l'échec « aucun transfert », choisie d'après ce que la
+    capture a VU — jamais d'après une supposition. Fonction PURE, testée
+    sur toutes les combinaisons utiles par le contrôle `test_firmware_capture`.
+
+    Ordre de priorité (du constat le plus fort au plus générique) :
+      1. la wing était DÉJÀ sur le bus à l'ouverture de l'enregistrement →
+         tout transfert a eu lieu avant (Asus, 12/11/2026 : grandMA2 onPC
+         tournait, l'ancien message envoyait pourtant le vérifier) ;
+      2. la wing n'est JAMAIS apparue pendant l'enregistrement → elle n'a
+         pas été branchée quand l'assistant le demandait ;
+      3. grandMA2 onPC ne tourne plus au moment du verdict → c'est lui qui
+         pousse le firmware ;
+      4. sinon : générique, causes plausibles dans l'ordre utile (wing pas
+         vraiment débranchée / rebranchée trop tôt, PUIS seulement onPC).
+    Sans étape 4 ouverte (script élevé mort avant la capture), on ne sait
+    rien de la wing : générique.
+    """
+    if not enregistrement_ouvert:
+        return "firmware.echec.aucun_transfert"
+    if wing_deja_la:
+        return "firmware.echec.aucun_transfert_wing_deja_la"
+    if not wing_vue:
+        return "firmware.echec.aucun_transfert_wing_jamais_vue"
+    if not ma2_tourne:
+        return "firmware.echec.aucun_transfert_ma2_ferme"
+    return "firmware.echec.aucun_transfert"
 
 
 def _echec(raison: str) -> dict:
