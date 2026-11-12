@@ -905,17 +905,24 @@ def _usb_boucle(gen=None):
             events = wb.parse_events(data)
 
             # ── Feedback LED : la LED d'un bouton suit l'appui (tous modes) ──────
-            if etat.E.LED["feedback"] and not etat.E.VEGAS["on"]:
-                for btn_id, pressed in events:
-                    # Au relâchement on ne retombe pas sur une veilleuse fixe mais
-                    # sur l'état réel de MA3 : sinon la LED d'un executor qui tourne
-                    # s'éteindrait dès qu'on lâche le bouton.
-                    if pressed:
-                        etat.E.BOUTONS_ENFONCES.add(btn_id)
-                        core.set_btn_led(btn_id, core.LED_FULL)
-                    else:
-                        etat.E.BOUTONS_ENFONCES.discard(btn_id)
-                        core.set_btn_led(btn_id, core.niveau_led_ma3(f"0x{btn_id:02x}"))
+            feedback_led = etat.E.LED["feedback"] and not etat.E.VEGAS["on"]
+            for btn_id, pressed in events:
+                # Retrait INCONDITIONNEL : si le feedback ou le chenillard a
+                # basculé entre l'appui et le relâchement, le bouton restait
+                # dans l'ensemble, et `rafraichir_leds_ma3` le sautait pour
+                # toujours — LED figée jusqu'au redémarrage.
+                if not pressed:
+                    etat.E.BOUTONS_ENFONCES.discard(btn_id)
+                if not feedback_led:
+                    continue
+                # Au relâchement on ne retombe pas sur une veilleuse fixe mais
+                # sur l'état réel de MA3 : sinon la LED d'un executor qui tourne
+                # s'éteindrait dès qu'on lâche le bouton.
+                if pressed:
+                    etat.E.BOUTONS_ENFONCES.add(btn_id)
+                    core.set_btn_led(btn_id, core.LED_FULL)
+                else:
+                    core.set_btn_led(btn_id, core.niveau_led_ma3(f"0x{btn_id:02x}"))
 
             # Rafraîchissement périodique des LED depuis MA3, à ~8 Hz. La sonde
             # n'écrit que toutes les 0,2 s : ce rythme n'apporte donc rien de plus

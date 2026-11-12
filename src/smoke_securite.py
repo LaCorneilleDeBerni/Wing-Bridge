@@ -31,6 +31,8 @@ rien — chacun réinjecte le défaut qu'il garde et exige de le voir échouer.
   test_handler_robuste      corps invalide ou route qui lève : connexion
                             coupée sans réponse
   test_profil_load_confine  /api/profile/load non confiné au dossier profils
+  test_profil_favori_et_save_proteges
+                            favori non confiné ; save écrasait la config sûre
   test_ecritures_usb_comptees
                             écritures DMX/LED refusées avalées en silence
   test_part_unique          temporaire .part partagé entre sauvegardes
@@ -2398,3 +2400,110 @@ def test_etat_injecte():
            "variable locale « etat », ancien nom) → toutes détectées")
     else:
         echec("réinjection NON détectée — contrôle aveugle", f"{rouge1} / {rouge2}")
+
+
+# ── 82. /api/profile/favori confiné ; /api/profile/save refuse les noms réservés ──
+
+def test_profil_favori_et_save_proteges(ui):
+    """Deux trous jumeaux de `test_profil_load_confine`, trouvés à l'audit du
+    10/11/2026 :
+
+    • `/api/profile/favori` testait `(PROFILE_DIR / f).exists()` sans
+      `chemin_profil()` : `../settings.json` ou un chemin absolu passaient, et
+      `charger_favori()` chargeait ce fichier comme profil au démarrage.
+    • `/api/profile/save` ne vérifiait pas le nom : « Enregistrer sous
+      `__reference__` » écrasait la config sûre (sans `locked`, sans passer
+      par `save_reference()`) ; idem `__autosave__` et le profil de secours
+      livré (`delete` et `favori` avaient la garde, `save` non).
+
+    Réinjections : chemin non confiné pour `favori` ; garde neutralisée pour
+    `save` (fichiers système renommés + `_profil_de_secours` → False)."""
+    section("82. /api/profile/favori confiné ; /api/profile/save refuse les noms réservés")
+    import wing_mapper as wm
+    import wing_profils
+    from smoke_core import _poster
+
+    d = Path(tempfile.mkdtemp())
+    dossier = d / "profiles"
+    dossier.mkdir()
+    dehors = d / "dehors.json"
+    dehors.write_text("{}", encoding="utf-8")
+    (dossier / "legit.json").write_text("{}", encoding="utf-8")
+
+    sauv = (wm.PROFILE_DIR, dict(etat.E.SETTINGS), ui.log, ui.save_settings,
+            wm.save_profile, json.loads(json.dumps(etat.E.PROFILE)),
+            etat.E.STATE.get("dirty"), ui.REFERENCE_FILE, ui.AUTOSAVE_FILE,
+            ui._profil_de_secours)
+    ecrits = []
+
+    def faux_save(profil, path=None):
+        ecrits.append(f"{wm.slugify(profil['name'])}.json")
+        return dossier / "x.json"
+
+    def favori(nom):
+        etat.E.SETTINGS["profil_favori"] = ""
+        r = _poster(ui, "/api/profile/favori", {"file": nom})
+        return r, etat.E.SETTINGS.get("profil_favori")
+
+    try:
+        wm.PROFILE_DIR = dossier
+        ui.log = lambda *a, **k: None
+        ui.save_settings = lambda *a, **k: None       # jamais settings.json réel
+        wm.save_profile = faux_save                   # jamais de .json réel
+
+        # ── favori : évasion refusée, profil du dossier accepté ──
+        fuites = [n for n in ("../dehors.json", str(dehors), "sous/../../dehors.json")
+                  if favori(n)[1]]
+        legit = favori("legit.json")
+
+        # ── save : noms réservés refusés, nom ordinaire accepté ──
+        passes = []
+        for nom in ("__reference__", "__autosave__", "Défauts Sécurité"):
+            r = _poster(ui, "/api/profile/save", {"name": nom})
+            if not r.get("error"):
+                passes.append(nom)
+        ecrits.clear()
+        r_ok = _poster(ui, "/api/profile/save", {"name": "Mon show"})
+        ecrits_ok = list(ecrits)          # figé AVANT la réinjection ci-dessous
+
+        # ── réinjection favori : l'ancienne construction, sans confinement ──
+        sauve_cp = wing_profils.chemin_profil
+        wing_profils.chemin_profil = lambda f: wm.PROFILE_DIR / f
+        try:
+            bug_fav = favori("../dehors.json")
+        finally:
+            wing_profils.chemin_profil = sauve_cp
+
+        # ── réinjection save : garde neutralisée ──
+        ui.REFERENCE_FILE = dossier / "zz_ref.json"
+        ui.AUTOSAVE_FILE = dossier / "zz_auto.json"
+        ui._profil_de_secours = lambda f: False
+        ecrits_avant = list(ecrits)
+        _poster(ui, "/api/profile/save", {"name": "__reference__"})
+        bug_save = "__reference__.json" in ecrits[len(ecrits_avant):]
+    finally:
+        (wm.PROFILE_DIR, _, ui.log, ui.save_settings, wm.save_profile, _, _,
+         ui.REFERENCE_FILE, ui.AUTOSAVE_FILE, ui._profil_de_secours) = sauv
+        etat.E.SETTINGS.clear(); etat.E.SETTINGS.update(sauv[1])
+        etat.E.PROFILE.clear(); etat.E.PROFILE.update(sauv[5])
+        etat.E.STATE["dirty"] = sauv[6]
+        shutil.rmtree(d, ignore_errors=True)
+
+    if fuites:
+        echec("un favori HORS du dossier des profils est accepté", ", ".join(fuites))
+    elif legit[1] != "legit.json":
+        echec("un favori légitime n'est plus accepté", str(legit[0]))
+    else:
+        ok("favori : ../, chemin absolu, sous/../../ refusés ; profil du dossier accepté")
+    if passes:
+        echec("save accepte un nom réservé", ", ".join(passes))
+    elif not r_ok.get("ok") or ecrits_ok != ["mon-show.json"]:
+        echec("save refuse un nom ordinaire", f"{r_ok} / {ecrits_ok}")
+    else:
+        ok("save : __reference__, __autosave__, profil de secours refusés (403) ; nom ordinaire écrit")
+    if bug_fav[1] == "../dehors.json" and bug_save:
+        ok("réinjections (chemin non confiné ; garde de save neutralisée) → "
+           "les deux trous rouvrent : le contrôle sait voir rouge")
+    else:
+        echec("réinjection NON détectée — contrôle aveugle",
+              f"favori={bug_fav[1]!r} save_ecrit_reference={bug_save}")

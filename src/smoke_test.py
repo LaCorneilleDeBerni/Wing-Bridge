@@ -64,6 +64,8 @@ ce silence que ce fichier casse.
                                  réponse (voire bloquait le fil)
   test_profil_load_confine      /api/profile/load chargeait n'importe quel JSON
                                  du disque
+  test_profil_favori_et_save_proteges
+                                 favori non confiné ; save écrasait la config sûre
   test_ecritures_usb_comptees   écritures DMX/LED refusées avalées en silence
   test_part_unique              deux sauvegardes simultanées partageaient le
                                  même fichier temporaire
@@ -140,6 +142,7 @@ from smoke_securite import (
     test_ecritures_etat_sous_verrou,
     test_handler_robuste,
     test_profil_load_confine,
+    test_profil_favori_et_save_proteges,
     test_ecritures_usb_comptees,
     test_part_unique,
     test_dmx_local,
@@ -566,6 +569,8 @@ def main():
         test_handler_robuste(ui)
     if ui is not None:
         test_profil_load_confine(ui)
+    if ui is not None:
+        test_profil_favori_et_save_proteges(ui)
     if ui is not None:
         test_ecritures_usb_comptees(ui)
     test_part_unique()

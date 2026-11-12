@@ -262,6 +262,16 @@ un menu **Fonction** (`EXEC_FUNCS`) :
   actif**) : `Flash`, `Temp`, `Swap`. Géré par `handle_button_release()`,
   détection par motif regex `_MOMENTARY_RE` sur la commande stockée.
 
+  ⚠️ **Avec la sonde MA3 active, le Off est décidé À L'APPUI**, pas au
+  relâchement : `_memoriser_off()` (`wing_boutons.py`) calcule
+  `token_selon_ma3(token, "relachement")` au moment du On et le range dans
+  `etat.E.OFF_EN_ATTENTE[btn_id]` ; le relâchement le rejoue tel quel. Même
+  principe que `MAINTIENS` pour le clavier. Avant (jusqu'au 10/11/2026), le
+  relâchement **redemandait à MA3** : une page tournée de l'autre main pendant
+  un Flash maintenu, ou une sonde périmée (`MA3_ETAT_PEREMPTION_S`), rendait
+  `None` → aucun Off → executor bloqué allumé. Contrôle §12 du test de fumée,
+  cas « page tournée pendant le maintien », vu rouge par réinjection.
+
 ⚠️ **`Swap`, pas `Swop`** : `Swap` agit au niveau executor/master (le bon) ;
 `Swop` au niveau gradateur de fixture — deux mots-clés MA3 distincts, faux sens.
 Syntaxes confirmées au manuel : `Flash On/Off Executor N`, `Temp On/Off

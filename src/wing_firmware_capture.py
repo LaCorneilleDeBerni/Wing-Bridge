@@ -98,7 +98,7 @@ SCRIPT_RETIRER = os.path.join(_DIR, "wing_firmware_retirer_eleve.ps1")
 # (`_amorce_verifiee`) sur la COPIE qu'elle exécute. ⚠️ À mettre à jour à
 # chaque modification d'un .ps1 : le contrôle test_amorce_elevee_verifiee
 # (smoke_securite.py) échoue tant qu'elles ne correspondent pas aux fichiers.
-SCRIPT_CAPTURE_SHA256 = "33f3bf9ef5dc3cd1a85ddd0a9d1976a1ec9a5b6461d2b8e7867f54a55230fc0c"
+SCRIPT_CAPTURE_SHA256 = "7cbf50865043c809ab93e925d30d912e41ade3870904d1287c0d8cf4af39b0cb"
 SCRIPT_RETIRER_SHA256 = "101453a274f155e55096902244ee129ed97f9335844e86dc44c2cf4b559d684a"
 
 # ── État de progression, lu par /api/status à CHAQUE poll (400 ms, voir
@@ -933,10 +933,15 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                 _log("journal.fw.capture_annulee_usbpcap_retire" if not garder_flag
                      else "journal.fw.capture_annulee_usbpcap_garde")
                 return _annule_resultat(residu)
+            # `etape` : la DERNIÈRE ligne de statut écrite par le script élevé.
+            # Sans elle, un script figé avant son premier `iface_count` ne
+            # laissait dans le journal que `interfaces=?, script_error=—`
+            # (cas Dell XPS 7590, 11 échecs illisibles — voir WINDOWS.md).
             _log("journal.fw.capture_echec_detail",
                  iface=st.get('iface_count', '?'),
                  pcap=st.get('pcap_sizes') or 'aucun',
-                 err=st.get('erreur') or '—')
+                 err=st.get('erreur') or '—',
+                 etape=st.get('etape') or '—')
             if st.get("besoin_redemarrage"):
                 CAPTURE_STATE["besoin_redemarrage"] = True
                 return _echec(st.get("erreur") or

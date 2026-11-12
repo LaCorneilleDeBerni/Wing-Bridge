@@ -202,8 +202,17 @@ def load_settings():
     try:
         if SETTINGS_FILE.exists():
             d = json.load(open(SETTINGS_FILE, encoding="utf-8"))
-            ip, port = valid_osc_target(d.get("ma3_ip", wb.MA3_IP),
-                                        d.get("ma3_port", wb.MA3_PORT))
+            # Une cible OSC invalide ne doit faire perdre QUE la cible : avant,
+            # `valid_osc_target()` levait ici, le `except` global avalait tout,
+            # et le favori, les cases et `plugin_slot` repartaient des défauts
+            # — puis le prochain `save_settings()` réécrivait le fichier sans
+            # eux. Repli sur la cible par défaut, le reste se charge normalement.
+            try:
+                ip, port = valid_osc_target(d.get("ma3_ip", wb.MA3_IP),
+                                            d.get("ma3_port", wb.MA3_PORT))
+            except Exception as e:
+                core.log("journal.settings.cible_osc_invalide", err=e)
+                ip, port = wb.MA3_IP, wb.MA3_PORT
             apply_osc_target(ip, port)
             try:
                 pin = int(d.get("osc_in_port", 0))

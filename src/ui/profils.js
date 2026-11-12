@@ -269,7 +269,10 @@ async function enregistrerSous() {
   if (nom === null) return;                 // annulé
   const propre = nom.trim();
   if (!propre) return;
-  await api("/api/profile/save", {name: propre});
+  const r = await api("/api/profile/save", {name: propre});
+  // Nom réservé (config sûre, sauvegarde auto, profil de secours) : le moteur
+  // refuse en 403 — sans ce retour, le clic semblait réussir en silence.
+  if (r && r.error) { alert(r.error); return; }
   loadProfiles(); loadProfile();
 }
 async function newProfile() {
@@ -304,7 +307,8 @@ async function importProfile() {
 
 // ── En-tête : enregistrer sur le profil actif / recharger un profil propre ──
 async function saveActiveProfile() {
-  await api("/api/profile/save", {});   // sans nom → enregistre sur le profil actif
+  const r = await api("/api/profile/save", {});   // sans nom → enregistre sur le profil actif
+  if (r && r.error) { alert(r.error); return; }
   loadProfiles();
 }
 // ── Filet de sécurité : config sûre (référence verrouillée) ──

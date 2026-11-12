@@ -128,6 +128,11 @@ class Etat:
 
         # ── Touches, mode console ──
         self.MAINTIENS = {}          # btn_id → spec clavier réellement enfoncé
+        # btn_id → commande « Off » décidée À L'APPUI (None = rien à envoyer).
+        # Même principe que MAINTIENS : le relâchement rejoue ce que l'appui a
+        # décidé, il ne redemande pas à MA3 — dont l'état a pu changer entre
+        # les deux (page tournée, sonde périmée) et laisser un executor allumé.
+        self.OFF_EN_ATTENTE = {}
         self.BOUTONS_ENFONCES = set()
         self.VERBE = {"token": None, "t": 0.0}
         self.CONSOLE_CIBLES = {"cmd": ""}

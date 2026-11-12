@@ -1181,8 +1181,13 @@ async function setLedFeedback() {
 }
 
 async function toggleVegas() {
-  vegasOn = !vegasOn;
-  await api("/api/led/vegas", {on: vegasOn});
+  // La bascule locale n'est entérinée qu'une fois le moteur d'accord : sinon
+  // un échec réseau inversait `vegasOn` sans changer le libellé, et le bouton
+  // mentait au clic suivant.
+  const voulu = !vegasOn;
+  try { await api("/api/led/vegas", {on: voulu}); }
+  catch (e) { return; }
+  vegasOn = voulu;
   const b = document.getElementById("vegasBtn");
   if (vegasOn) { b.textContent = t("ui.param.led.chenillard_arret"); b.className = "btn big danger"; }
   else { b.textContent = t("ui.param.led.chenillard"); b.className = "btn big primary"; }
@@ -1219,7 +1224,9 @@ async function ledRestore() {
 async function scanUSB() {
   const el = document.getElementById("scanResult");
   el.innerHTML = tHtml("ui.param.scan.en_cours");
-  const list = await api("/api/usb/scan");
+  let list;
+  try { list = await api("/api/usb/scan"); }
+  catch (e) { list = {error: t("ui.commun.moteur_injoignable")}; }   // sinon « Scan en cours… » à vie
   if (list.error) { el.innerHTML = "<span style='color:var(--red)'>" + esc(list.error) + "</span>"; return; }  // TODO i18n Phase 2 : list.error (API)
   if (!list.length) { el.innerHTML = tHtml("ui.param.scan.aucun"); return; }
 
@@ -1255,8 +1262,10 @@ async function scanUSB() {
       btn.textContent = t("ui.param.scan.tester");
       btn.onclick = async () => {
         btn.disabled = true; btn.textContent = t("ui.param.scan.test_en_cours");
-        const r = await api("/api/usb/probe", {vid: d.vid, pid: d.pid});
-        btn.disabled = false; btn.textContent = t("ui.param.scan.tester");
+        let r;
+        try { r = await api("/api/usb/probe", {vid: d.vid, pid: d.pid}); }
+        catch (e) { r = {error: t("ui.commun.moteur_injoignable")}; }
+        finally { btn.disabled = false; btn.textContent = t("ui.param.scan.tester"); }
         const box = document.createElement("div");
         box.style.cssText = "margin-top:8px;padding:10px;background:var(--bg);border-radius:8px;font-size:12.5px";
         if (r.error) {
@@ -1318,11 +1327,19 @@ async function desinstallExecuter() {
   try {
     r = await api("/api/uninstall", {keep: keep, dry_run: false});
   } catch (e) {
-    r = null;
+    // Moteur injoignable (déjà mort, requête échouée) : RIEN n'a été
+    // supprimé. Avant, `r = null` tombait dans la ligne de succès « Mets le
+    // dossier à la corbeille » — un bouton qui mentait (règle du GUIDE).
+    r = {error: t("ui.modale.desinstall.echec_requete")};
   }
+  const echec = !!(r && r.error);
+  const fin = document.getElementById("desinstallFin");
+  fin.querySelector("h4").textContent =
+    t(echec ? "ui.modale.desinstall.echec_titre" : "ui.modale.desinstall.fin_titre");
+  fin.querySelector("p:last-of-type").hidden = echec;   // « tu peux fermer… corbeille »
   const ul = document.getElementById("desinstallResidu");
   ul.innerHTML = "";
-  const lignes = (r && r.error) ? [r.error]
+  const lignes = echec ? [r.error]
     : (r && r.residue && r.residue.length) ? r.residue
     : [t("ui.modale.desinstall.corbeille")];
   lignes.forEach(t => {

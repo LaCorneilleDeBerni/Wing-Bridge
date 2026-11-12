@@ -490,7 +490,9 @@ async function saveOscTarget() {
 async function makeDiagnostic() {
   const m = document.getElementById("diagMsg");
   m.textContent = t("ui.bridge.diag.collecte"); m.style.color = "";
-  const d = await api("/api/diagnostic", {});
+  let d;
+  try { d = await api("/api/diagnostic", {}); }
+  catch (e) { d = {error: t("ui.commun.moteur_injoignable")}; }   // sinon « collecte en cours… » à vie
   if (d.ok) {
     m.textContent = t("ui.bridge.diag.ok", { nom: d.name });
     m.style.color = "var(--green)";

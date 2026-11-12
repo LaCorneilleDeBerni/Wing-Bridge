@@ -270,6 +270,26 @@ hardware you use alongside Wing Bridge.
   Rosetta, but no Intel machine could be tested, wing included.
 - **Firmware capture: Windows x64 only.** Elsewhere, import a `.pcapng` capture
   made on a Windows PC, or a `.bin`.
+- **Known issue — integrated firmware capture can hang on some PCs.** On one
+  tested machine (Dell XPS 7590, Windows 11 Pro) every attempt stalled at step
+  3 (“Preparing the recording”) for ~5½ minutes and then failed with no
+  interface detected, while the same build works on the development PC. The
+  cause is **not established** (the elevated USBPcap helper never reported
+  back). If this happens to you: close grandMA2 onPC, restart Windows once,
+  and use the manual fallback — capture with Wireshark (which bundles
+  USBPcap) while grandMA2 onPC pushes the firmware, then *Settings →
+  Configure the firmware → Import a capture*. See `docs/WINDOWS.md`.
+- **Known issue — the capture assistant can skip “Unplug your wing”.** Seen
+  once: a wing sitting in bootloader briefly drops off the bus on its own, the
+  assistant takes that for an unplug, and grandMA2 onPC pushes the firmware
+  before the recording starts. Tip: **unplug the wing before you launch
+  grandMA2 onPC**, then follow the steps. A second attempt succeeds.
+- **All dots grey (“…”) and an empty log on a Windows PC that has been “shut
+  down” but not restarted for weeks.** Windows can stop recycling closed
+  connections on the local port 8765 until nothing can listen there any more
+  (even an older Wing Bridge build). Use *Start → Power → **Restart*** — with
+  Fast Startup enabled, *Shut down* keeps the broken state. Details in
+  `docs/WINDOWS.md`.
 - **Encoder wheels**: configured per profile. Partial detection of grandMA3's
   current selection works, but full automatic following is not there yet.
 - **Not notarised (no paid Apple account).** The macOS app is ad-hoc signed;
