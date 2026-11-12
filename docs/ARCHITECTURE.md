@@ -263,6 +263,16 @@ Trois défauts de l'audit du 25/09/2026, trois mécanismes :
   `try` : un tour qui lève est abandonné, compté (`BOUCLE["erreurs_tour"]`),
   journalisé au plus toutes les 10 s, et la boucle repart d'une ligne de base
   neuve (`prev_faders = None`, même règle que les valeurs fantômes).
+- **Écritures DMX/LED refusées** (`cycle_dmx`). Un `dev.write()` d'un paquet
+  LED/DMX qui lève n'arrête pas la boucle mais est compté
+  (`BOUCLE["ecritures_ko"]`, dernière erreur dans `ecriture_err`) et affiché
+  dans la pastille Bridge. ⚠️ Ces deux champs sont **remis à zéro à chaque
+  connexion réussie** (`connect_wing`, sous `LOCK`, au moment où `DEV[0]` et
+  `STATE["wing"]` sont posés) : ils décrivent la poignée courante, pas la vie
+  du process — sans ça, l'`Errno 19` de la poignée perdue pendant une capture
+  de firmware restait affiché wing rebranchée et saine (Asus, 12/11/2026).
+  `erreurs_tour` et `relances`, eux, restent cumulatifs. Contrôle
+  `test_ecritures_usb_comptees`.
 - **Superviseur** (`usb_loop`, point d'entrée du fil). Relance `_usb_boucle`
   si elle meurt quand même (délai croissant, `BOUCLE["relances"]`) ; au-delà de
   5 morts en 60 s il **abandonne** et laisse l'exception remonter →

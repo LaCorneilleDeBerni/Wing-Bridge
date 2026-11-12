@@ -1815,6 +1815,58 @@ def test_ecritures_usb_comptees(ui):
         echec("les écritures DMX/LED refusées restent invisibles",
               f"compteur {n}, erreur {err!r}, exposé : {expose}")
 
+    # ── Remise à zéro par une (re)connexion RÉUSSIE — le chemin réel ─────────
+    # 🐛 Asus, 12/11/2026 : après une capture de firmware, la pastille Bridge
+    # gardait « ⚠ 1 écriture DMX/LED refusée (Errno 19 No such device) » alors
+    # que la wing était rebranchée et saine (31 Hz, erreurs_tour=0), jusqu'au
+    # redémarrage du moteur : rien ne remettait le compteur à zéro. On passe
+    # par le VRAI `connect_wing()` (seul `full_init` est doublé : il rend une
+    # poignée factice), sur un état INJECTÉ — l'état du moteur réel n'est pas
+    # touché. `DEV[0]` vaut None dans l'état neuf : connect_wing ne relance
+    # donc aucun fil usb_loop (règle de `etat.injecter`).
+    import wing_init as _wi
+    import wing_statut
+    class _DevOk:
+        def write(self, ep, data, timeout=None):
+            return len(data)
+    sauv2 = {"full_init": ui.full_init, "log": ui.log, "drain": ui.wb.drain,
+             "flux": dict(wc.WING_FLUX), "reco": dict(_wi.RECO_MUETTE)}
+    connectee = False
+    apres = api0 = ("?", "?")
+    try:
+        ui.full_init = (lambda verbose=False, force=False, force_operateur=False:
+                        _DevOk())
+        ui.log = lambda *a, **k: None
+        ui.wb.drain = lambda dev, n, timeout_ms=None: None
+        with etat.injecter() as e:
+            e.BOUCLE["ecritures_ko"] = 7
+            e.BOUCLE["ecriture_err"] = "USBError: [Errno 19] No such device"
+            wc.connect_wing(force=True, quiet=True)
+            connectee = bool(e.STATE["wing"]) and e.DEV[0] is not None
+            apres = (e.BOUCLE["ecritures_ko"], e.BOUCLE["ecriture_err"])
+            b2 = wing_statut.statut()["boucle"]
+            api0 = (b2.get("ecritures_ko"), b2.get("ecriture_err"))
+    except Exception as exc:
+        echec("la reconnexion simulée a levé", f"{type(exc).__name__}: {exc}")
+    finally:
+        ui.full_init, ui.log, ui.wb.drain = sauv2["full_init"], sauv2["log"], sauv2["drain"]
+        wc.WING_FLUX.clear(); wc.WING_FLUX.update(sauv2["flux"])
+        _wi.RECO_MUETTE.clear(); _wi.RECO_MUETTE.update(sauv2["reco"])
+    # L'interface REconstruit `detail` à chaque poll et n'ajoute l'avertissement
+    # que si `> 0` : à 0 le texte disparaît de lui-même (audit de source, pas
+    # de DOM ici).
+    efface_ui = "s.boucle.ecritures_ko > 0" in bridge
+    if not connectee:
+        echec("la connexion simulée n'a pas abouti — le scénario ne prouve rien",
+              f"wing={connectee}")
+    elif apres == (0, "") and api0 == (0, "") and efface_ui:
+        ok("compteur à 7 → connect_wing() réussi (chemin réel) → 0 et erreur "
+           "effacée ; /api/status expose 0 ; la pastille n'affiche que si > 0")
+    else:
+        echec("LE COMPTEUR D'ÉCRITURES REFUSÉES SURVIT À UNE RECONNEXION RÉUSSIE",
+              f"après connexion : {apres}, /api/status : {api0}, "
+              f"pastille conditionnelle : {efface_ui}")
+
     def avale(source: str) -> bool:
         """cycle_dmx contient-il un `except Exception: pass` ?"""
         for n in ast.walk(ast.parse(source)):

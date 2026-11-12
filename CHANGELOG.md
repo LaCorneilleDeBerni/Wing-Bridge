@@ -15,6 +15,14 @@ the project aims for [semantic versioning](https://semver.org/).
   `127.0.0.1`), and an output line must not share port 8000. Seen on
   2026-11-12: `en0` + `127.0.0.0/8` opened no port at all, with no message.
 
+### Fixed
+
+- The Bridge dot's “N DMX/LED write(s) refused by the wing” warning was never
+  reset: after a firmware capture it kept showing `[Errno 19] No such device`
+  while the wing was back and healthy, until the engine was restarted (known
+  issue of 1.0.1). The counter and its last error are now cleared on every
+  successful (re)connection, on the same path that logs “Wing connected”.
+
 ## [1.0.1] — 2026-11-12
 
 Maintenance release: same features as 1.0.0, 15 fixes from a full code audit,
