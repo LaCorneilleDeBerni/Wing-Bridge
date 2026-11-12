@@ -7,7 +7,13 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- Help and diagnostic texts about grandMA3's OSC page no longer say just
+  “`Interface` ≠ `<None>`”: `Interface` must be consistent with `Preferred IP`
+  and the destination (local MA3: `lo0 (127.0.0.1)` + `127.0.0.0/8` +
+  `127.0.0.1`), and an output line must not share port 8000. Seen on
+  2026-11-12: `en0` + `127.0.0.0/8` opened no port at all, with no message.
 
 ## [1.0.1] — 2026-11-12
 
