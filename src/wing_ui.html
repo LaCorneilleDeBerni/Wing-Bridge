@@ -422,13 +422,18 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
   </div>
   <!-- ⚠️ Bandeau « firmware non configuré » — masqué tant qu'un firmware est
        disponible (cache ou blob livré). poll() (bridge.js) le montre/cache
-       selon s.firmware.configure. Sans firmware, la wing ne peut pas démarrer :
-       le bouton renvoie vers « Paramètres → Configurer le firmware ». -->
+       selon s.firmware.configure, et choisit le TEXTE du span #fwBanniereTxt
+       via clesFirmwareManquant(s) : « ne peut pas démarrer » SEULEMENT si la
+       wing n'est pas connectée ; si elle tourne (firmware gardé en RAM par sa
+       prise d'alimentation — Asus, 12/11/2026), on dit qu'il faut importer
+       AVANT le prochain débranchement. data-i18n-dynamic : c'est poll() qui
+       écrit le texte, pas appliquerLangue(). Le bouton renvoie vers
+       « Paramètres → Configurer le firmware ». -->
   <div id="firmwareBanner" style="display:none; padding:12px 20px;
        background:rgba(255,180,0,.14); border:1px solid var(--accent);
        border-radius:8px; font-size:13px; line-height:1.6; margin-bottom:16px">
     <b style="color:var(--accent)" data-i18n="ui.bridge.fw_banniere.titre">⚠️ Firmware non configuré</b>
-    <span class="muted" data-i18n="ui.bridge.fw_banniere.txt">— la wing ne peut pas démarrer tant qu'aucun firmware
+    <span class="muted" id="fwBanniereTxt" data-i18n="ui.bridge.fw_banniere.txt" data-i18n-dynamic>— la wing ne peut pas démarrer tant qu'aucun firmware
       n'a été importé.</span>
     <button class="btn primary" style="margin-left:10px"
             onclick="allerConfigurerFirmware()" data-i18n="ui.bridge.fw_banniere.bouton">Configurer le firmware</button>

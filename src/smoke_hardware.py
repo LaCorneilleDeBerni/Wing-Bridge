@@ -431,12 +431,111 @@ def test_boutons_honnetes(ui):
         else:
             ok("« Désinstaller » : cocher « conserver » ne fait que retirer des "
                "suppressions, et le résidu manuel est donné")
+
+        # ── f) la pastille « Wing USB » ne dit pas « ne peut pas démarrer »
+        #       à une wing qui tourne ───────────────────────────────────────
+        _pastille_firmware_honnete()
     except Exception as e:
         echec("le contrôle des boutons a levé une exception",
               f"{type(e).__name__}: {e}")
     finally:
         ui.log = vrai_log
         etat.E.STATE.update(sauve)
+
+
+# Ce qu'une pastille/bannière « firmware absent » n'a PAS le droit de dire à
+# une wing connectée. fr et en, en minuscules.
+_FW_NE_PEUT_PAS_DEMARRER = ("ne peut pas démarrer", "can't start", "cannot start")
+
+
+def _pastille_firmware_honnete():
+    """(f) Firmware absent : le texte dépend de l'état RÉEL de la wing.
+
+    🐛 Constat Asus du 12/11/2026 : `firmware.configure=False` (aucun fichier
+    importé) et pourtant la wing répondait « operational … no reset » et
+    tournait à 30 Hz — son firmware vit en RAM et sa prise USB d'alimentation
+    seule l'avait gardé (preuve : tout débranché → « firmware NOT
+    CONFIGURED »). Pendant ce temps la pastille « Wing USB » et le bandeau de
+    l'onglet Bridge affichaient « la wing ne peut pas démarrer tant qu'aucun
+    firmware n'est importé » : ils regardaient le FICHIER, pas la wing.
+
+    La décision vit dans `clesFirmwareManquant(s)` (ui/bridge.js), fonction
+    pure que l'on EXÉCUTE ici dans node, telle qu'elle est écrite, avec les
+    deux états ; puis on lit dans fr.json/en.json le texte des clés rendues :
+      • firmware absent + wing connectée (`s.wing` vrai, le champ que la
+        pastille utilise déjà pour « connectée ») → aucun des textes ne dit
+        « ne peut pas démarrer » ;
+      • firmware absent + wing absente → les deux le disent (l'alerte reste) ;
+      • firmware configuré → null (rien à afficher de spécial).
+    ⚠️ Un seul contrôle pour la pastille ET le bandeau : les deux affichaient
+    le même mensonge, les deux doivent suivre la même décision.
+    """
+    import subprocess
+    node = None
+    for cand in ("node", "/opt/homebrew/bin/node", "/usr/local/bin/node"):
+        try:
+            subprocess.run([cand, "--version"], capture_output=True, timeout=5)
+            node = cand
+            break
+        except Exception:
+            continue
+    if not node:
+        note("(f) node introuvable — pastille firmware non vérifiée")
+        return
+    js = (HERE / "ui" / "bridge.js").read_text(encoding="utf-8")
+    m = re.search(r"^function clesFirmwareManquant\(s\) \{.*?^\}", js,
+                  re.S | re.M)
+    if not m:
+        echec("(f) clesFirmwareManquant(s) introuvable dans ui/bridge.js",
+              "la pastille « Wing USB » et le bandeau firmware n'ont plus de "
+              "décision commune testable")
+        return
+    etats = {
+        "connectee": {"firmware": {"configure": False}, "wing": True},
+        "absente":   {"firmware": {"configure": False}, "wing": False},
+        "configure": {"firmware": {"configure": True},  "wing": True},
+    }
+    script = (m.group(0) + "\nconst E = " + json.dumps(etats)
+              + ";\nconst R = {}; for (const k in E) R[k] = clesFirmwareManquant(E[k]);"
+              "\nprocess.stdout.write(JSON.stringify(R));")
+    r = subprocess.run([node, "-e", script], capture_output=True, text=True,
+                       timeout=20)
+    if r.returncode != 0:
+        echec("(f) clesFirmwareManquant a planté dans node", r.stderr[:300])
+        return
+    res = json.loads(r.stdout)
+    fr = json.loads((HERE / "locales" / "fr.json").read_text(encoding="utf-8"))
+    en = json.loads((HERE / "locales" / "en.json").read_text(encoding="utf-8"))
+    defauts = []
+    if res.get("configure") is not None:
+        defauts.append(f"firmware configuré → {res['configure']!r} (attendu : null)")
+    for cas, doit_dire in (("connectee", False), ("absente", True)):
+        cles = res.get(cas) or {}
+        for role in ("pastille", "banniere"):
+            cle = cles.get(role)
+            if not cle:
+                defauts.append(f"wing {cas} : aucune clé pour {role}")
+                continue
+            for lang, cat in (("fr", fr), ("en", en)):
+                txt = cat.get(cle)
+                if txt is None:
+                    defauts.append(f"wing {cas} : {cle} absente de {lang}.json")
+                    continue
+                dit = any(x in txt.lower() for x in _FW_NE_PEUT_PAS_DEMARRER)
+                if dit != doit_dire:
+                    defauts.append(
+                        f"wing {cas}, {role} ({lang}, {cle}) "
+                        + ("dit « ne peut pas démarrer » à une wing qui tourne"
+                           if dit else "ne dit plus « ne peut pas démarrer » "
+                                       "alors que la wing est absente")
+                        + f" : « {txt[:70]}… »")
+    if defauts:
+        echec("(f) firmware absent : la pastille/bannière ne suit pas l'état "
+              "réel de la wing", "\n".join(defauts[:6]))
+    else:
+        ok("(f) firmware absent : wing connectée → « tourne sur le firmware en "
+           "mémoire, importe-le avant de débrancher » ; wing absente → « ne "
+           "peut pas démarrer » (fr + en, pastille + bandeau)")
 
 
 def test_sorties_rendent_la_wing(ui):

@@ -7,6 +7,30 @@
    ⚠️ ORDRE DE CHARGEMENT IMPOSÉ : core en premier, init en
       dernier. Voir l'ordre des <script defer> dans wing_ui.html. */
 
+// ── Firmware non configuré : quel texte est VRAI ? ───────────────────────
+// 🐛 CORRIGÉ (chantier D, constat Asus du 12/11/2026) : aucun firmware importé
+// (s.firmware.configure === false), et pourtant la wing tournait à 30 Hz — son
+// firmware vit en RAM et sa prise USB d'alimentation seule l'avait gardé
+// (preuve : tout débranché → « firmware NOT CONFIGURED »). La pastille disait
+// « la wing ne peut pas démarrer » en regardant le FICHIER, pas la wing.
+// `s.wing` (etat.E.STATE["wing"]) fait foi : il n'est vrai qu'après une
+// poignée USB réussie, c'est-à-dire quand un firmware a répondu au Hello.
+// Rend null quand le firmware est configuré, sinon les clés i18n à afficher :
+//   - wing connectée → « tourne sur le firmware gardé en mémoire, importe-le
+//     avant le prochain débranchement » ;
+//   - wing absente   → « ne peut pas démarrer tant qu'aucun firmware… ».
+// Fonction PURE (aucun DOM), exécutée telle quelle par le contrôle
+// test_boutons_honnetes (f) dans node, avec les deux états.
+function clesFirmwareManquant(s) {
+  if (!(s && s.firmware && s.firmware.configure === false)) return null;
+  if (s.wing) {
+    return { pastille: "ui.sante.wing.fw_manque_en_ram",
+             banniere: "ui.bridge.fw_banniere.txt_en_ram" };
+  }
+  return { pastille: "ui.sante.wing.fw_manque",
+           banniere: "ui.bridge.fw_banniere.txt" };
+}
+
 // ── Status polling ────────────────────────────────────────────────────
 async function poll() {
   try {
@@ -74,11 +98,13 @@ async function poll() {
     try { majEncMa3(s.encodeurs); } catch (err) {
       console.warn("majEncMa3:", err);
     }
-    // Firmware pas configuré : la wing ne peut pas démarrer. On le dit DANS la
-    // pastille « Wing USB » — c'est là qu'on cherche pourquoi elle ne répond
-    // pas. Le message défile (setHealth) et le bandeau de l'onglet Bridge
-    // (majFirmware) reste le renvoi cliquable.
-    const fwManque = s.firmware && s.firmware.configure === false;
+    // Firmware pas configuré : on le dit DANS la pastille « Wing USB » — c'est
+    // là qu'on cherche pourquoi elle ne répond pas. Le message défile
+    // (setHealth) et le bandeau de l'onglet Bridge (majFirmware) reste le
+    // renvoi cliquable. ⚠️ Le TEXTE dépend de l'état réel de la wing
+    // (clesFirmwareManquant) : « ne peut pas démarrer » n'est vrai que si elle
+    // n'est PAS connectée.
+    const fwCles = clesFirmwareManquant(s);
     if (s.wing_replug) {
       // ⚠️ UN SEUL GESTE, physique, sans théorie ni script : seule une coupure
       //    d'alimentation sort la wing de son bootloader (reset de port USB
@@ -89,8 +115,8 @@ async function poll() {
       setHealth("hWing", "warn",
         t("ui.sante.wing.muette")
         + (s.wing_erreur ? " (" + s.wing_erreur + ")" : ""));
-    } else if (fwManque) {
-      setHealth("hWing", "warn", t("ui.sante.wing.fw_manque"));
+    } else if (fwCles) {
+      setHealth("hWing", "warn", t(fwCles.pastille));
     } else {
       setHealth("hWing",
                 s.wing ? "on" : ((s.connecting || s.want) ? "warn" : ""),
@@ -185,6 +211,12 @@ async function poll() {
     // principe que majEncMa3). majFirmware vit dans parametres.js.
     try { if (typeof majFirmware === "function") majFirmware(s.firmware); }
     catch (err) { console.warn("majFirmware:", err); }
+    // Texte du bandeau « firmware non configuré » : même décision que la
+    // pastille (clesFirmwareManquant). majFirmware ne gère que l'affichage.
+    if (fwCles) {
+      const txt = document.getElementById("fwBanniereTxt");
+      if (txt) txt.textContent = t(fwCles.banniere);
+    }
 
     // Capture intégrée du firmware (Windows) — même principe d'isolation.
     try { if (typeof majCapture === "function") majCapture(s.capture); }
