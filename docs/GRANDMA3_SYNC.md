@@ -124,8 +124,33 @@ Contrôle `test_diagnostic_osc`, qui rejoue cette configuration exacte.
 | Réglage | Valeur | Piège |
 |---|---|---|
 | **Enable Input** | activé | **obligatoire** — c'est lui qui autorise la réception |
-| **Interface** | **jamais `<None>`** | `lo0 (127.0.0.1)` convient pour du local. ⚠️ Ce réglage **saute parfois au chargement d'un show** — première chose à revérifier si tout marchait hier |
+| **Interface** | **cohérent avec `Preferred IP` et `Destination IP`**, jamais `<None>` | MA3 sur la même machine : `lo0 (127.0.0.1)` + `Preferred IP 127.0.0.0/8` + destination `127.0.0.1`. ⚠️ Ce réglage **saute parfois au chargement d'un show** — première chose à revérifier si tout marchait hier |
+| **Preferred IP** | du même monde que `Interface` | `127.0.0.0/8` avec `lo0` ; le sous-réseau de l'interface active sinon. Incohérent ⇒ **aucun socket**, sans message (cas ci-dessous) |
 | Enable Output | activé | nécessaire seulement pour le retour vers l'app |
+
+#### 📌 Cas mesuré le 12/11/2026 (Mac, grandMA3 2.5.1.0, build #253)
+
+Réseau global **vert**, `MA-Net Interface = en0`, `Enable Input` et `Enable
+Output` activés, deux lignes OSCData correctes (ligne 2 : 8000, Receive +
+Receive Command = Yes, destination 127.0.0.1). Et pourtant `lsof -nP -iUDP:8000`
+**vide** (MA3 n'ouvrait que 8005, 10669, 30020…). L'app envoyait bien
+(`FADER F4 → FaderMaster Executor 207 At 97` au journal), la sonde répondait :
+faders et roues sans effet dans MA3.
+
+Le bandeau disait **`Preferred IP 127.0.0.0/8` avec `Interface en0
+(192.168.50.226)`** — incohérents. Après passage de `Interface` à
+`lo0 (127.0.0.1)` et bascule `Enable Input` No → Yes : `app_gma3 … UDP *:8000`
+présent, les faders suivent. La variable exacte (Interface seule, ou la
+bascule) n'a pas été isolée ; le jeu cohérent est ce qui est établi.
+
+Autre constat le même soir : **les deux lignes OSCData étaient sur 8000** (la
+ligne d'envoi aussi). Résultat : **deux sockets `*:8000`** dans `lsof`.
+Hypothèse non mesurée : une partie des datagrammes peut être remise à la
+ligne qui ne reçoit pas. Garder la ligne de sortie sur **8001**, comme dans
+la configuration de référence ci-dessus.
+
+Les textes d'aide de l'app qui conseillaient « `Interface` = l'interface du
+Mac (ex. `en0`) » sont corrigés dans la branche `correctifs-v1.0.2`.
 
 ### 4. MA3 écoute-t-il vraiment ? (vérifiable hors de l'app)
 

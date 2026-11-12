@@ -132,7 +132,13 @@ info → Run anyway**. One time only.
    firmware** (see below).
 6. **Configure grandMA3.** The full instructions are in the **Bridge** tab
    (“Check the configuration” button): `Menu → In & Out → OSC`, port 8000,
-   `Enable Input` on, `Interface` ≠ `<None>`, `Receive Command` = `Yes`.
+   `Enable Input` on, `Receive` and `Receive Command` = `Yes`, and
+   **`Interface` consistent with `Preferred IP` and `Destination IP`** — MA3 on
+   this machine: `Interface` = the loopback entry (`lo0 (127.0.0.1)`),
+   `Preferred IP` = `127.0.0.0/8`, destination `127.0.0.1`; never `<None>`.
+   Seen on 2026-11-12: `en0` with `127.0.0.0/8` opens **no** port 8000, with no
+   error. Keep any *output* line (Send = Yes) on another port, e.g. 8001, not
+   on 8000. After a change, toggle `Enable Input` off and on.
 7. **Install the MA3 plugin.** A mandatory step, on the same footing as the
    firmware: without it, Wing Bridge sends OSC **blind** — no executor LED
    feedback, no fader pickup, no page awareness. With grandMA3 running, the
