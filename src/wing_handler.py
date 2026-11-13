@@ -200,6 +200,26 @@ class Handler(BaseHTTPRequestHandler):
     # limite, le journal recevrait une ligne par seconde. Une par route / 30 s.
     _JETON_REFUS_VU = {}
 
+    # 🐛 CORRIGÉ (13/11/2026, Asus) : un refus (403 jeton / origine) partait
+    # AVANT d'avoir lu le corps de la requête. Le serveur fermait alors la
+    # connexion (HTTP/1.0) avec des octets non lus dans son tampon de
+    # réception → la pile TCP envoie un RST au lieu d'un FIN, et le client peut
+    # recevoir « connexion abandonnée » (WinError 10053) AVANT d'avoir lu le
+    # 403. Vu sous Windows au contrôle 69 (1 fois sur 4, jamais sur Mac) ; pour
+    # l'interface réelle, un jeton périmé devenait « moteur injoignable » au
+    # lieu du 403 qui déclenche le rechargement de la page. On vide donc le
+    # corps (borné par CORPS_MAX) avant de répondre. Contrôle test_jeton_api.
+    def _vider_corps(self):
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            return
+        if 0 < length <= self.CORPS_MAX:
+            try:
+                self.rfile.read(length)
+            except OSError:
+                pass
+
     def _refuser_jeton(self):
         import wing_ui as core
         chemin = urllib.parse.urlparse(self.path).path
@@ -208,6 +228,7 @@ class Handler(BaseHTTPRequestHandler):
             Handler._JETON_REFUS_VU[chemin] = maintenant
             core.log("journal.http.jeton_refuse", methode=self.command,
                      chemin=chemin)
+        self._vider_corps()
         self._json({"error": "jeton invalide"}, 403)
 
     def _refuser_origine(self):
@@ -216,6 +237,7 @@ class Handler(BaseHTTPRequestHandler):
         core.log("journal.http.origine_refusee", methode=self.command,
                  chemin=self.path, origin=self.headers.get('Origin', '—'),
                  host=self.headers.get('Host', '—'))
+        self._vider_corps()
         self._json({"error": "origine non autorisée"}, 403)
 
     # ══ TABLES DE ROUTAGE ═══════════════════════════════════════════════════

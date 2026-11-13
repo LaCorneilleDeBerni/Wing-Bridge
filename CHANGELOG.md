@@ -17,6 +17,12 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Fixed
 
+- A request refused for a bad API token or a foreign Origin was answered
+  (403) **before its body was read**, so the server closed the connection with
+  unread bytes and the client could see “connection aborted” (WinError 10053)
+  instead of the 403 — seen on Windows, 1 time in 4, in the smoke test; in the
+  real interface a stale token became “engine unreachable” instead of the
+  page reload the 403 triggers. The body is now drained before refusing.
 - **Firmware capture, step 2 (“Unplug your wing”) could move on without an
   unplug**: a single “not on the bus” sample was taken as an unplug, while a
   wing re-enumerating (firmware pushed by grandMA2 onPC) or rebooting in

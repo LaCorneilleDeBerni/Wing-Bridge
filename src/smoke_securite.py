@@ -962,6 +962,25 @@ def test_jeton_api(ui):
            "un faux (403), acceptés avec (en-tête ou ?jeton=), Origin étrangère "
            "toujours refusée, page porteuse du jeton, lectures libres")
 
+    # (a2) Le refus LIT le corps avant de répondre (13/11/2026, Asus : 403
+    # envoyé avec le corps non lu → fermeture avec octets en attente → RST →
+    # le client voit « connexion abandonnée » (WinError 10053) avant le 403,
+    # 1 fois sur 4 sous Windows, jamais sur Mac). Audit de source (le seul
+    # test déterministe ici) + un vrai POST refusé avec un corps de 200 ko.
+    import inspect as _insp
+    src_j = _insp.getsource(wing_handler.Handler._refuser_jeton)
+    src_o = _insp.getsource(wing_handler.Handler._refuser_origine)
+    vide_avant = all(s.find("self._vider_corps()") != -1
+                     and s.find("self._vider_corps()") < s.find("self._json(")
+                     for s in (src_j, src_o))
+    if not vide_avant:
+        echec("un refus 403 (jeton ou origine) répond SANS avoir lu le corps",
+              "_refuser_jeton/_refuser_origine doivent appeler _vider_corps() "
+              "avant _json() — sinon RST et « connexion abandonnée » côté client "
+              "(WinError 10053, vu sur l'Asus)")
+    else:
+        ok("refus 403 : le corps est lu avant la réponse (jeton et origine)")
+
     # (b) Le fichier pour l'assistant : 0600, relu à l'identique.
     d = Path(tempfile.mkdtemp())
     try:
