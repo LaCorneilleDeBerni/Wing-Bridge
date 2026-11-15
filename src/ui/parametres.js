@@ -52,7 +52,7 @@ async function fwExport() {
 }
 // Appelée par poll() (bridge.js) à chaque tick : reflète l'état du firmware
 // dans la carte Paramètres et n'affiche « Exporter » qu'une fois en cache.
-function majFirmware(fw) {
+function majFirmware(fw, cap) {
   const etat = document.getElementById("firmwareEtat");
   const btnExport = document.getElementById("fwExportBtn");
   const banner = document.getElementById("firmwareBanner");
@@ -67,7 +67,8 @@ function majFirmware(fw) {
         empreinte: fw.sha256_ok ? t("ui.param.fw.empreinte_ok") : t("ui.param.fw.empreinte_ko") });
       etat.style.color = fw.sha256_ok ? "var(--green)" : "var(--accent)";
     } else {
-      etat.textContent = t("ui.param.fw.aucun");
+      // Windows x64 (cap non null) : on renvoie vers « Capturer », pas vers l'import.
+      etat.textContent = t(cap ? "ui.param.fw.aucun_capture" : "ui.param.fw.aucun");
       etat.style.color = "var(--accent)";
     }
   }
@@ -161,6 +162,43 @@ function fwEtatCarton(i, cap) {
   if (i === phase) return "en_cours";
   if (i > phase) return "a_venir";
   return (cap && cap.interrompu_au && i > cap.interrompu_au) ? "saute" : "fait";
+}
+
+// Décision PURE de l'affichage de l'assistant (chantier F, 16/11/2026), exécutée
+// telle quelle dans node par le contrôle 49. cap = s.capture (null hors Windows
+// x64). `manuelDeplie` : le lien « Repli manuel » a été cliqué.
+//  - modal    : panneau modal « étape N/7 » PENDANT la capture seulement ;
+//  - progress : cartons visibles pendant la capture, et APRÈS un ÉCHEC (pastille
+//    rouge + « Réessayer ») — mais plus après un succès ni une annulation
+//    (avant : le panneau et son « Annuler » restaient jusqu'à F5) ;
+//  - capturer : le bouton « Capturer… » disparaît pendant la capture ;
+//  - manuel   : l'import .pcapng/.bin n'est masqué QUE là où la capture
+//    intégrée existe (cap non null) — ailleurs c'est le seul chemin.
+function fwAffichageCapture(cap, manuelDeplie) {
+  const actif = !!(cap && cap.actif);
+  const echec = !!(cap && !cap.actif && cap.phase && cap.ok === false && !cap.annule);
+  return {
+    bloc: !!cap,
+    modal: actif,
+    progress: actif || echec,
+    capturer: !!cap && !actif,
+    manuel: !cap || !!manuelDeplie,
+    lienManuel: !!cap,
+  };
+}
+let _fwManuelDeplie = false;
+let _fwCaptureDernier = null;
+function fwManuelBasculer() {
+  _fwManuelDeplie = !_fwManuelDeplie;
+  _fwAppliquerManuel(_fwCaptureDernier);
+}
+function _fwAppliquerManuel(cap) {
+  const a = fwAffichageCapture(cap, _fwManuelDeplie);
+  document.querySelectorAll(".fwManuel").forEach(function (el) {
+    el.style.display = a.manuel ? "" : "none";
+  });
+  const lien = document.getElementById("fwManuelLien");
+  if (lien) lien.style.display = a.lienManuel ? "" : "none";
 }
 
 // Rend les 7 cartons : bordure/opacité selon l'état, pastilles et consigne
@@ -283,19 +321,37 @@ function _mercWizStepbar(states) {
 }
 
 function majCapture(cap) {
+  _fwCaptureDernier = cap || null;
+  const aff = fwAffichageCapture(cap, _fwManuelDeplie);
   const bloc = document.getElementById("fwCaptureBloc");
-  if (bloc) bloc.style.display = cap ? "" : "none";
-  if (!cap) return;
+  if (bloc) bloc.style.display = aff.bloc ? "" : "none";
+  _fwAppliquerManuel(cap);
+  if (!cap) {
+    const fond0 = document.getElementById("fwCaptureFond");
+    if (fond0) fond0.classList.remove("ouvert");
+    return;
+  }
 
   const btn = document.getElementById("fwCaptureBtn");
   const progress = document.getElementById("fwCaptureProgress");
   const removeBtn = document.getElementById("fwRemoveCaptureBtn");
 
-  if (btn) btn.disabled = !!cap.actif;
+  if (btn) { btn.disabled = !!cap.actif; btn.style.display = aff.capturer ? "" : "none"; }
   // Les cartons restent visibles APRÈS la fin (succès, échec, annulation) :
   // c'est là que vivent la pastille rouge qui dit pourquoi et « Réessayer ».
   // Masqués seulement tant qu'aucune capture n'a commencé (phase 0).
-  if (progress) progress.style.display = (cap.actif || cap.phase) ? "" : "none";
+  if (progress) {
+    progress.style.display = aff.progress ? "" : "none";
+    progress.classList.toggle("fwModal", aff.modal);
+  }
+  const fond = document.getElementById("fwCaptureFond");
+  if (fond) fond.classList.toggle("ouvert", aff.modal);
+  const titre = document.getElementById("fwModalTitre");
+  if (titre) {
+    titre.style.display = aff.modal ? "" : "none";
+    titre.textContent = aff.modal
+      ? t("ui.param.fw.modal.titre", { n: cap.phase || 1, total: cap.phase_total || 7 }) : "";
+  }
   _fwCaptureCartons(cap);
   if (removeBtn) removeBtn.style.display = cap.bouton_secours ? "" : "none";
 
@@ -305,6 +361,7 @@ function majCapture(cap) {
   const annBtn = document.getElementById("fwCaptureAnnulerBtn");
   if (annBtn && !_fwAnnulDemande) {
     annBtn.disabled = !cap.actif;
+    annBtn.style.display = cap.actif ? "" : "none";   // plus d'« Annuler » une fois fini
     annBtn.textContent = t("ui.param.fw.progress.annuler_demarche");
   }
 

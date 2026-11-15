@@ -616,6 +616,12 @@ n'active « Suivant » que sur `suivant_possible` (`fwSuivantActif`, fonction
 pure exécutée dans node par le smoke), et déplace l'unique bloc Suivant /
 Réessayer / Annuler dans le carton en cours — plus de barre `1/7 … 7/7`.
 
+**Chantier F (16/11/2026, retours du test réel Asus) — NON testé sur Windows,
+seulement par le contrôle 49 (5a-5e, node + réinjections).** L'assistant s'ouvre
+en **panneau modal « Étape N/7 »** sur fond flou (`.fwFond`, `#fwCaptureProgress.fwModal`,
+décision pure `fwAffichageCapture`) ; il se **ferme** après succès/annulation (reste, non modal, après un échec : pastille rouge + « Réessayer »), le bouton « Capturer » est masqué pendant, et l'import manuel (.pcapng/.bin) est replié derrière « Repli manuel » **seulement si `s.capture` non null** (jamais retiré : seul chemin sur Mac/Linux).
+Règle `button.btn:disabled` générale ; annulation voulue journalisée `journal.fw.capture_annulee_utilisateur` ; messages « firmware non configuré » → « Capturer » sur Windows x64 (`clesFirmwareManquant`, variantes `_capture`). Les journaux d'init (`journal.init.fw_non_configure`, `wing_init.py`) parlent encore d'import : hors périmètre.
+
 | # | Carton | Pastilles (🟢 quand…) | Ce que le clic « Suivant » déclenche |
 |---|---|---|---|
 | 1 | 🟠 Préparation | **wing débranchée** (absence durable : 6 sondes « absente » d'affilée, `_SondeAbsenceDurable`, le seuil du chantier A) **et** **grandMA2 onPC lancé** (`gma2_onpc_lance`) | ⚙️ carton 2 : élévation (UAC), installation d'USBPcap, enregistrement |

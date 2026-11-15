@@ -1491,6 +1491,9 @@ class Handler(BaseHTTPRequestHandler):
                 core.log("journal.fw.capture_ok", o=res['longueur'],
                          residu=res.get('residu', ''))
                 self._relancer_wing_apres_config()
+            elif res.get("annule"):
+                # Annulation VOULUE : pas un échec (chantier F, 16/11/2026).
+                core.log("journal.fw.capture_annulee_utilisateur")
             else:
                 core.log("journal.fw.capture_ko", raison=res.get('raison', '?'))
 

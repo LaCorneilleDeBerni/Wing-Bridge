@@ -339,6 +339,7 @@ def test_firmware_capture():
 
     _controle_messages_capture(fwc)
     _controle_assistant_cartons(fwc, wing_handler)
+    _controle_chantier_f(fwc)
 
 
 def _controle_assistant_cartons(fwc, wing_handler):
@@ -585,6 +586,129 @@ def _controle_assistant_cartons(fwc, wing_handler):
     else:
         ok("(4) interface : « Suivant » actif sur suivant_possible seulement (4 états + nul, "
            "exécutés dans node) ; cartons fait / sauté / en cours / à venir cohérents")
+
+
+def _controle_chantier_f(fwc):
+    """Chantier F (16/11/2026) : retours du test réel de l'assistant sur l'Asus.
+
+    Cinq promesses, chacune vue ROUGE par réinjection (rapport du chantier F) :
+      (a) `button.btn:disabled` existe (grisé, curseur interdit) — « Suivant »
+          bloqué restait jaune plein ;
+      (b) le panneau se FERME dès que actif=false sans échec à montrer
+          (succès, annulation) ; modal seulement pendant la capture ; le bouton
+          « Capturer » disparaît pendant ;
+      (c) l'import manuel n'est masqué QUE si s.capture est non null ;
+      (d) une annulation voulue a sa clé de journal, distincte de l'échec ;
+      (e) « firmware manquant » renvoie vers « Capturer » si s.capture non null,
+          vers l'import sinon — et toutes les clés existent en fr ET en en.
+    """
+    import json
+    import re as _re
+    import subprocess
+    html = (HERE / "wing_ui.html").read_text(encoding="utf-8")
+    js = (HERE / "ui" / "parametres.js").read_text(encoding="utf-8")
+    jsb = (HERE / "ui" / "bridge.js").read_text(encoding="utf-8")
+    fr = json.loads((HERE / "locales" / "fr.json").read_text(encoding="utf-8"))
+    en = json.loads((HERE / "locales" / "en.json").read_text(encoding="utf-8"))
+
+    # (a) règle CSS
+    m = _re.search(r"button\.btn:disabled[^{]*\{[^}]*\}", html)
+    if not m or "not-allowed" not in m.group(0) or "opacity" not in m.group(0):
+        echec("(5a) pas de règle `button.btn:disabled` (grisé + not-allowed) dans wing_ui.html")
+    else:
+        ok("(5a) règle `button.btn:disabled` présente (opacité réduite, curseur interdit)")
+
+    # (d) clé de journal d'annulation
+    h = (HERE / "wing_handler.py").read_text(encoding="utf-8")
+    cle = "journal.fw.capture_annulee_utilisateur"
+    i_ann = h.find('elif res.get("annule")')
+    i_ko = h.find('core.log("journal.fw.capture_ko"')
+    if not (0 < i_ann < i_ko) or cle not in h[i_ann:i_ko]:
+        echec("(5d) une annulation voulue n'a pas sa propre clé de journal (avant le « capture_ko »)")
+    elif cle not in fr or cle not in en or fr[cle] == fr.get("journal.fw.capture_ko") \
+            or "échou" in fr[cle] or "failed" in en[cle]:
+        echec("(5d) clé de journal d'annulation absente en fr/en ou qui parle d'échec")
+    else:
+        ok("(5d) annulation voulue : clé de journal distincte et neutre (fr + en)")
+
+    # (b)(c)(e) en node
+    node = None
+    for cand in ("node", "/opt/homebrew/bin/node", "/usr/local/bin/node"):
+        try:
+            subprocess.run([cand, "--version"], capture_output=True, timeout=5)
+            node = cand
+            break
+        except Exception:
+            continue
+    m_aff = _re.search(r"^function fwAffichageCapture\(cap, manuelDeplie\) \{.*?^\}", js, _re.S | _re.M)
+    m_cles = _re.search(r"^function clesFirmwareManquant\(s\) \{.*?^\}", jsb, _re.S | _re.M)
+    if not m_aff or not m_cles:
+        echec("(5) fwAffichageCapture / clesFirmwareManquant introuvables")
+        return
+    if not node:
+        note("(5) node introuvable — décisions d'affichage non exécutées")
+        return
+    script = (m_aff.group(0) + "\n" + m_cles.group(0) + """
+const cas = {
+  actif:   {actif: true,  phase: 3, ok: null},
+  succes:  {actif: false, phase: 7, ok: true},
+  annule:  {actif: false, phase: 2, ok: false, annule: true},
+  echec:   {actif: false, phase: 4, ok: false, annule: false},
+  neuf:    {actif: false, phase: 0, ok: null},
+};
+const R = {};
+for (const k in cas) R[k] = fwAffichageCapture(cas[k], false);
+R.nul = fwAffichageCapture(null, false);
+R.deplie = fwAffichageCapture(cas.neuf, true);
+const fw = {configure: false};
+R.cles = {
+  win_sans: clesFirmwareManquant({firmware: fw, wing: false, capture: {}}),
+  win_ram:  clesFirmwareManquant({firmware: fw, wing: true,  capture: {}}),
+  mac_sans: clesFirmwareManquant({firmware: fw, wing: false, capture: null}),
+  mac_ram:  clesFirmwareManquant({firmware: fw, wing: true,  capture: null}),
+};
+process.stdout.write(JSON.stringify(R));""")
+    r = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=20)
+    if r.returncode != 0:
+        echec("(5) décisions d'affichage : plantage node", r.stderr[:300])
+        return
+    R = json.loads(r.stdout)
+    if not (R["actif"]["modal"] and R["actif"]["progress"]) or R["actif"]["capturer"]:
+        echec("(5b) pendant la capture : modal absent, ou bouton « Capturer » encore visible", repr(R["actif"]))
+    elif R["succes"]["progress"] or R["annule"]["progress"] or R["annule"]["modal"] or R["neuf"]["progress"]:
+        echec("(5b) le panneau reste ouvert alors que actif=false sans échec à montrer", repr(R))
+    elif not R["echec"]["progress"] or R["echec"]["modal"]:
+        echec("(5b) après un échec : cartons (pastille rouge + Réessayer) attendus, non modaux", repr(R["echec"]))
+    else:
+        ok("(5b) panneau modal pendant la capture seulement ; fermé après succès/annulation, "
+           "gardé (non modal) après échec ; « Capturer » masqué pendant (node)")
+    if R["nul"]["manuel"] is not True or R["nul"]["lienManuel"] is not False:
+        echec("(5c) s.capture null (macOS/Linux) : l'import manuel DOIT rester affiché", repr(R["nul"]))
+    elif R["neuf"]["manuel"] is not False or R["neuf"]["lienManuel"] is not True \
+            or R["deplie"]["manuel"] is not True:
+        echec("(5c) s.capture non null : import manuel masqué par défaut, dépliable par le lien",
+              repr((R["neuf"], R["deplie"])))
+    else:
+        ok("(5c) import manuel : masqué par défaut si s.capture non null (dépliable), "
+           "affiché si null (node)")
+    c = R["cles"]
+    attendu = {
+        "win_sans": ("ui.sante.wing.fw_manque_capture", "ui.bridge.fw_banniere.txt_capture"),
+        "win_ram": ("ui.sante.wing.fw_manque_en_ram_capture", "ui.bridge.fw_banniere.txt_en_ram_capture"),
+        "mac_sans": ("ui.sante.wing.fw_manque", "ui.bridge.fw_banniere.txt"),
+        "mac_ram": ("ui.sante.wing.fw_manque_en_ram", "ui.bridge.fw_banniere.txt_en_ram"),
+    }
+    faux = [k for k, (p_, b_) in attendu.items() if (c[k]["pastille"], c[k]["banniere"]) != (p_, b_)]
+    manquantes = [k for p_b in attendu.values() for k in p_b if k not in fr or k not in en]
+    if faux or manquantes:
+        echec("(5e) « firmware manquant » ne renvoie pas vers Capturer (Windows) / l'import (ailleurs), "
+              "ou clés absentes en fr/en", f"faux={faux} manquantes={manquantes}")
+    elif "ui.param.fw.aucun_capture" not in fr or "ui.param.fw.aucun_capture" not in en \
+            or 'cap ? "ui.param.fw.aucun_capture"' not in js:
+        echec("(5e) message « Aucun firmware » : variante capture absente")
+    else:
+        ok("(5e) « firmware non configuré » : renvoie vers « Capturer » si s.capture non null, "
+           "vers l'import sinon (4 cas dans node, clés fr + en)")
 
 
 def _controle_messages_capture(fwc):

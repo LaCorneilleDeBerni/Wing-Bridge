@@ -23,12 +23,15 @@
 // test_boutons_honnetes (f) dans node, avec les deux états.
 function clesFirmwareManquant(s) {
   if (!(s && s.firmware && s.firmware.configure === false)) return null;
+  // Windows x64 (s.capture non null) : la capture intégrée existe → on renvoie
+  // vers « Capturer », jamais vers l'import .pcapng/.bin (repli manuel masqué).
+  const c = s.capture ? "_capture" : "";
   if (s.wing) {
-    return { pastille: "ui.sante.wing.fw_manque_en_ram",
-             banniere: "ui.bridge.fw_banniere.txt_en_ram" };
+    return { pastille: "ui.sante.wing.fw_manque_en_ram" + c,
+             banniere: "ui.bridge.fw_banniere.txt_en_ram" + c };
   }
-  return { pastille: "ui.sante.wing.fw_manque",
-           banniere: "ui.bridge.fw_banniere.txt" };
+  return { pastille: "ui.sante.wing.fw_manque" + c,
+           banniere: "ui.bridge.fw_banniere.txt" + c };
 }
 
 // ── Status polling ────────────────────────────────────────────────────
@@ -209,7 +212,7 @@ async function poll() {
     // ── Firmware configuré ? ── ISOLÉ dans son try : si l'affichage firmware
     // plante, il ne doit JAMAIS emporter le header ni les pastilles (même
     // principe que majEncMa3). majFirmware vit dans parametres.js.
-    try { if (typeof majFirmware === "function") majFirmware(s.firmware); }
+    try { if (typeof majFirmware === "function") majFirmware(s.firmware, s.capture); }
     catch (err) { console.warn("majFirmware:", err); }
     // Texte du bandeau « firmware non configuré » : même décision que la
     // pastille (clesFirmwareManquant). majFirmware ne gère que l'affichage.

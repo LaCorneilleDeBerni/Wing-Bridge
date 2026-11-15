@@ -1151,5 +1151,13 @@
   "firmware.extract.empreinte_differente": "empreinte sha256 différente : {h}",
   "firmware.extract.valide": "firmware valide ({o} o, sha256 confirmé)",
   "err.html_introuvable.titre": "Interface introuvable",
-  "err.html_introuvable.corps": "Le fichier <code>wing_ui.html</code> n'a pas pu être lu :<br><code>{erreur}</code><br>Chemin attendu : <code>{chemin}</code>"
+  "err.html_introuvable.corps": "Le fichier <code>wing_ui.html</code> n'a pas pu être lu :<br><code>{erreur}</code><br>Chemin attendu : <code>{chemin}</code>",
+  "ui.param.fw.modal.titre": "Étape {n}/{total}",
+  "ui.param.fw.manuel_lien": "Repli manuel",
+  "ui.param.fw.aucun_capture": " ⚠️ Aucun firmware — clique « Capturer depuis grandMA2 onPC » ci-dessus.",
+  "ui.bridge.fw_banniere.txt_capture": "— la wing ne peut pas démarrer tant que le firmware n'a pas été capturé (Paramètres → « Capturer depuis grandMA2 onPC »).",
+  "ui.bridge.fw_banniere.txt_en_ram_capture": "— la wing tourne pour l'instant sur le firmware gardé dans sa mémoire ; capture-le (Paramètres → « Capturer depuis grandMA2 onPC ») avant le prochain débranchement ou redémarrage, sinon elle ne redémarrera pas.",
+  "ui.sante.wing.fw_manque_capture": "Firmware non installé — Paramètres → 🧩 Firmware de la wing → « Capturer depuis grandMA2 onPC ». La wing ne peut pas démarrer sans.",
+  "ui.sante.wing.fw_manque_en_ram_capture": "connectée — firmware non capturé : la wing tourne sur le firmware gardé dans sa mémoire. Capture-le (Paramètres → 🧩 Firmware de la wing) avant le prochain débranchement ou redémarrage, sinon elle ne redémarrera pas.",
+  "journal.fw.capture_annulee_utilisateur": "⏹ Capture du firmware annulée par l'utilisateur"
 }

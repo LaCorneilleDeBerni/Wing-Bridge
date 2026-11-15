@@ -229,6 +229,24 @@ button.btn.primary:hover { filter: brightness(1.1); }
 button.btn.danger { color: var(--red); }
 button.btn.green { background: var(--green); color: #14171c; border: none; }
 button.btn.big { font-size: 15px; padding: 12px 24px; }
+/* Bouton inactif : grisé, curseur interdit, aucun survol (chantier F, 16/11/2026 :
+   « Suivant » bloqué mais resté jaune plein). Placé APRÈS .primary/.green pour
+   l'emporter sur leur fond ; vaut pour tous les boutons .btn désactivés. */
+button.btn:disabled, button.btn:disabled:hover {
+  opacity: .4; cursor: not-allowed; filter: grayscale(.85);
+  border-color: var(--border);
+}
+button.btn.primary:disabled, button.btn.green:disabled { border: none; }
+/* Assistant de capture en PANNEAU MODAL (Windows x64) : seul élément actif,
+   fond flou. Les classes sont posées par majCapture() (ui/parametres.js) ;
+   le MÊME #fwCaptureProgress sert au modal et à l'affichage d'après-échec. */
+.fwFond { position: fixed; inset: 0; z-index: 800; display: none;
+  background: rgba(8,10,13,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.fwFond.ouvert { display: block; }
+#fwCaptureProgress.fwModal { position: fixed; z-index: 801; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); width: min(760px, 94vw); max-height: 92vh;
+  overflow-y: auto; margin: 0; padding: 18px; background: var(--card);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
 
 input[type=text], input[type=number], select {
   background: var(--bg); color: var(--text);
@@ -1159,7 +1177,11 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
            USBPcap comprise). Les 7 cartons ci-dessous sont alimentés par
            majCapture() → _fwCaptureCartons() depuis /api/status (s.capture :
            phase, pastilles, etape, suivant_possible, suivant_cle). -->
+      <div id="fwCaptureFond" class="fwFond"></div>
       <div id="fwCaptureProgress" style="display:none;font-size:13px;margin-top:8px">
+        <!-- Titre du modal « Étape N/7 » : écrit par majCapture() (data-i18n-dynamic),
+             vide hors modal. -->
+        <div id="fwModalTitre" style="display:none;font-size:16px;font-weight:700;margin-bottom:10px" data-i18n="ui.param.fw.modal.titre" data-i18n-dynamic>Étape {n}/{total}</div>
         <!-- Consigne n°1, en gros : l'opération dure 2-4 min et la wing
              s'éteint/rallume plusieurs fois (ré-énumérations + nettoyage
              USBPcap). L'envie de débrancher pendant ces phases a été signalée
@@ -1167,7 +1189,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
              branchement/débranchement (4, 6) : la règle est « seulement quand
              c'est demandé ». -->
         <div style="font-weight:800;font-size:14px;padding:10px 12px;border-radius:8px;
-             margin-bottom:8px;background:var(--accent);color:#fff;text-align:center" data-i18n-html="ui.param.fw.progress.avertissement">
+             margin-bottom:8px;background:var(--card2);border:1px solid var(--accent);color:var(--text);text-align:center" data-i18n-html="ui.param.fw.progress.avertissement">
           ⚠️ Ne branche / débranche la wing QUE quand le carton en cours te le demande.<br>
           <span style="font-weight:600">Entre-temps elle va s'éteindre et se rallumer plusieurs fois — c'est normal, laisse faire (3 à 5 min).</span>
         </div>
@@ -1323,7 +1345,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       </div>
     </div>
 
-    <details class="help" id="hFirmware"><summary data-i18n="ui.param.fw.hrepli.summary">Repli manuel (Wireshark) — ou une autre plateforme</summary>
+    <details class="help fwManuel" id="hFirmware"><summary data-i18n="ui.param.fw.hrepli.summary">Repli manuel (Wireshark) — ou une autre plateforme</summary>
     <div class="hbody" data-i18n-html="ui.param.fw.hrepli.body">
       Sur un PC <b>Windows x64</b> : installe Wireshark (il propose USBPcap),
       lance la capture sur l'interface <b>USBPcapN</b> du hub où sera la wing,
@@ -1335,9 +1357,14 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       le <code>.bin</code>, puis « 📄 Importer un firmware (.bin) » ici.
       Détail : docs/HARDWARE.md.
     </div></details>
+    <!-- Import MANUEL (.pcapng / .bin) : « trop geek » sur Windows x64 → masqué
+         par défaut là (s.capture non null) derrière le lien discret « Repli
+         manuel ». Sur macOS/Linux (s.capture null) c'est le SEUL chemin : il
+         reste affiché, lien masqué (fwAffichageCapture, ui/parametres.js). -->
     <div class="toolbar">
-      <button class="btn" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
-      <button class="btn" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
+      <button class="btn fwManuel" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
+      <button class="btn fwManuel" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
+      <a href="#" id="fwManuelLien" class="muted" style="display:none;font-size:12px" onclick="fwManuelBasculer(); return false;" data-i18n="ui.param.fw.manuel_lien">Repli manuel</a>
       <button class="btn" id="fwExportBtn" onclick="fwExport()" style="display:none" data-i18n="ui.param.fw.export_btn">💾 Exporter le firmware</button>
       <span class="muted" id="fwMsg" style="font-size:12.5px"></span>
     </div>

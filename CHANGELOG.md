@@ -18,6 +18,16 @@ the project aims for [semantic versioning](https://semver.org/).
   start on that click, and a click arriving while a detection is red is
   ignored and logged. Timeouts are safety nets behind the click, not
   drivers. Not yet tested on a Windows machine.
+- **Capture assistant, UI pass after the first real test (Windows x64).** The
+  assistant now opens as a modal panel ("Step N/7") over a blurred page while
+  it runs; the "Capture from grandMA2 onPC" button is hidden during the
+  capture; the panel closes by itself after a success or a cancel (it used to
+  stay, Cancel included, until F5) and stays only after a failure (red dot +
+  Retry). The manual .pcapng/.bin import is tucked behind a discreet "Manual
+  fallback" link where the integrated capture exists; on macOS/Linux it stays
+  visible, being the only path. "Firmware not configured" messages point to
+  "Capture" on Windows x64, to the import elsewhere. Only one accented
+  (yellow) button per step. Not yet tested on a Windows machine.
 - Help and diagnostic texts about grandMA3's OSC page no longer say just
   “`Interface` ≠ `<None>`”: `Interface` must be consistent with `Preferred IP`
   and the destination (local MA3: `lo0 (127.0.0.1)` + `127.0.0.0/8` +
@@ -26,6 +36,10 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Fixed
 
+- Disabled buttons now look disabled (a general `.btn:disabled` rule: greyed,
+  no hover): "Next" was blocked but still plain yellow. A deliberate cancel of
+  the firmware capture is now logged as "cancelled by the user", not as a
+  failure.
 - A request refused for a bad API token or a foreign Origin was answered
   (403) **before its body was read**, so the server closed the connection with
   unread bytes and the client could see “connection aborted” (WinError 10053)

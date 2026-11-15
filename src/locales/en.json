@@ -1151,5 +1151,13 @@
   "firmware.extract.empreinte_differente": "different sha256 fingerprint: {h}",
   "firmware.extract.valide": "valid firmware ({o} B, sha256 confirmed)",
   "err.html_introuvable.titre": "Interface not found",
-  "err.html_introuvable.corps": "The file <code>wing_ui.html</code> couldn't be read:<br><code>{erreur}</code><br>Expected path: <code>{chemin}</code>"
+  "err.html_introuvable.corps": "The file <code>wing_ui.html</code> couldn't be read:<br><code>{erreur}</code><br>Expected path: <code>{chemin}</code>",
+  "ui.param.fw.modal.titre": "Step {n}/{total}",
+  "ui.param.fw.manuel_lien": "Manual fallback",
+  "ui.param.fw.aucun_capture": " ⚠️ No firmware — click \"Capture from grandMA2 onPC\" above.",
+  "ui.bridge.fw_banniere.txt_capture": "— the wing can't start until the firmware has been captured (Settings → \"Capture from grandMA2 onPC\").",
+  "ui.bridge.fw_banniere.txt_en_ram_capture": "— the wing is currently running on the firmware kept in its memory; capture it (Settings → \"Capture from grandMA2 onPC\") before the next unplug or restart, or it won't start again.",
+  "ui.sante.wing.fw_manque_capture": "Firmware not installed — Settings → 🧩 Wing firmware → \"Capture from grandMA2 onPC\". The wing can't start without it.",
+  "ui.sante.wing.fw_manque_en_ram_capture": "connected — firmware not captured: the wing is running on the firmware kept in its memory. Capture it (Settings → 🧩 Wing firmware) before the next unplug or restart, or it won't start again.",
+  "journal.fw.capture_annulee_utilisateur": "⏹ Firmware capture cancelled by the user"
 }
