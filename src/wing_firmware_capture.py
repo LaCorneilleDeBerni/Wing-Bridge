@@ -105,26 +105,46 @@ SCRIPT_RETIRER_SHA256 = "101453a274f155e55096902244ee129ed97f9335844e86dc44c2cf4
 # ui/init.js) — c'est ce qui permet à l'interface d'afficher l'assistant pas à
 # pas EN DIRECT pendant l'opération (installation USBPcap comprise, ~1-3 min).
 #
-# `phase` (1→7) + `phase_titre` alimentent la barre d'étapes de l'interface :
-#   1. Lance grandMA2 onPC sur ce PC
-#   2. Débranche ta wing
-#   3. Préparation de l'enregistrement
-#   4. Branche ta wing — puis ne la débranche plus
-#   5. Ferme grandMA2 onPC            ← il TIENT la wing tant qu'il tourne
-#   6. Débranche ta wing              ← bus au calme → retrait PROPRE de USBPcap
-#   7. Rebranche ta wing → Wing connectée
-# `chemin` : où le firmware a atterri, affiché à la fin.
+# `phase` (1→7) = le CARTON courant de l'assistant semi-automatique (décision
+# de l'auteur du 13/11/2026 : plus rien n'avance tout seul — chaque carton
+# attend un clic « Suivant », actif seulement quand ses détections sont
+# vertes ; 🟠 = geste de l'utilisateur, ⚙️ = automatique, lancé PAR le clic
+# « Suivant » du carton précédent) :
+#   1. 🟠 Préparation : wing DÉBRANCHÉE (absence durable) + grandMA2 onPC lancé
+#   2. ⚙️ Autorisation Windows (UAC), installation d'USBPcap, enregistrement
+#   3. 🟠 Branche ta wing → ⚙️ transfert + extraction → « firmware capturé »
+#   4. 🟠 Ferme grandMA2 onPC          ← il TIENT la wing tant qu'il tourne
+#   5. 🟠 Débranche ta wing            ← bus au calme → retrait PROPRE de USBPcap
+#   6. ⚙️ Retrait d'USBPcap
+#   7. 🟠 Rebranche ta wing → Wing connectée (fin, sans clic)
+# `phase_titre` : titre résolu du carton (journal) ; `chemin` : où le firmware
+# a atterri, affiché à la fin.
 #
-# ⚠️ `usb_exclusif` : vrai UNIQUEMENT pendant les phases 3-4 + le nettoyage
-# USBPcap (le seul moment où l'app doit LÂCHER le bus — voir wing_connexion.
-# usb_loop). Les phases 1-2 (pré-vols) et 5-7 (fermeture MA2, rebranchement,
-# attente de connexion) ont au contraire BESOIN que usb_loop tourne pour que
-# Wing Bridge reprenne la wing.
+# Champs du mode « cartons » (lus par ui/parametres.js, _fwCaptureCartons) :
+#   `attente_utilisateur` : vrai pendant qu'un `_attendre_suivant()` tourne ;
+#   `pastilles`          : [{cle, etat: "vert"|"rouge"|"orange", texte}] — les
+#                          détections du carton courant, texte déjà résolu
+#                          dans la langue de l'app (comme `etape`) ;
+#   `suivant_possible`   : vrai SEULEMENT si on attend un clic ET qu'aucune
+#                          pastille n'est rouge (orange = avertissement non
+#                          bloquant) — c'est l'unique chose qui active le
+#                          bouton « Suivant » côté interface (fwSuivantActif) ;
+#   `suivant_cle`        : clé i18n du libellé du bouton (il dit ce que le clic
+#                          DÉCLENCHE : « autoriser Windows », « retirer USBPcap »…).
+#
+# ⚠️ `usb_exclusif` : vrai UNIQUEMENT des cartons 2-3 jusqu'à la fin du
+# retrait d'USBPcap (carton 6) — le seul moment où l'app doit LÂCHER le bus
+# (voir wing_connexion.usb_loop). Le carton 1 (pré-vol) et le carton 7
+# (rebranchement, attente de connexion) ont au contraire BESOIN que usb_loop
+# tourne pour que Wing Bridge reprenne la wing.
 PHASES_TOTAL = 7
 CAPTURE_STATE = {"actif": False, "etape": "", "ok": None, "raison": None,
                  "note": None, "besoin_redemarrage": False, "annule": False,
                  "phase": 0, "phase_total": PHASES_TOTAL, "phase_titre": "",
-                 "chemin": None, "usb_exclusif": False}
+                 "chemin": None, "usb_exclusif": False,
+                 "attente_utilisateur": False, "pastilles": [],
+                 "suivant_possible": False, "suivant_cle": None,
+                 "interrompu_au": None}
 
 # ── Annulation « à tout moment » ─────────────────────────────────────────────
 # Bouton « Annuler la démarche » de l'assistant (dispo tout du long). On NE TUE
@@ -136,12 +156,23 @@ CAPTURE_STATE = {"actif": False, "etape": "", "ok": None, "raison": None,
 # le thread de capture.
 _ANNULER = threading.Event()
 
-# Combien de temps l'assistant attend une action de l'utilisateur avant
-# d'abandonner PROPREMENT (message actionnable, reprise en recliquant).
-TIMEOUT_ATTENTE_MA2   = 300.0    # « lance grandMA2 onPC »
-TIMEOUT_DEBRANCHEMENT = 120.0    # « débranche ta wing »
+# ── Le clic « Suivant » ──────────────────────────────────────────────────────
+# Posé par la route POST /api/firmware/capture/suivant (thread HTTP), consommé
+# par `_attendre_suivant()` (thread de capture). Un clic n'est PRIS que si la
+# détection du carton est verte à l'instant où la boucle le voit ; sinon il est
+# ignoré et journalisé. Remis à zéro à l'entrée de chaque carton : un clic
+# resté en suspens ne peut jamais valider le carton suivant.
+_SUIVANT = threading.Event()
 
-# Étape 2 (« Débranche ta wing ») : nombre d'échantillons CONSÉCUTIFS « wing
+# ── Filets de temps, PAS des moteurs d'avancement ───────────────────────────
+# Depuis l'assistant à cartons (13/11/2026), aucun délai ne fait avancer quoi
+# que ce soit : seul le clic « Suivant » avance. Ces constantes bornent juste
+# l'attente pour que l'assistant finisse toujours PROPREMENT (USBPcap retiré,
+# message clair) si l'utilisateur disparaît.
+TIMEOUT_CLIC_S        = 900.0    # 15 min sans clic « Suivant » sur un carton
+TIMEOUT_PREPARATION_S = 300.0    # carton 2 : UAC + installation + attache à chaud
+
+# Cartons 1 et 5 (« wing débranchée ») : nombre d'échantillons CONSÉCUTIFS « wing
 # absente » (sondés à 1 s d'intervalle) exigés avant de tenir la wing pour
 # réellement débranchée — 6 sondes d'affilée = absence vue pendant 5 s.
 #
@@ -162,12 +193,10 @@ TIMEOUT_DEBRANCHEMENT = 120.0    # « débranche ta wing »
 # plutôt qu'importée : ce module ne charge pas wing_ui au niveau module (il
 # doit s'importer léger, sur toute plateforme) ; le test de fumée (section 49)
 # vérifie que (6 − 1) × 1 s ≥ wing_ui.ABSENCE_REELLE_S, pour que les deux ne
-# dérivent pas l'un de l'autre en silence. 5 s restent courtes devant les 10 s
-# pendant lesquelles l'étape 2 est tenue à l'écran (_PHASE_TENIR).
+# dérivent pas l'un de l'autre en silence.
 ABSENCE_DURABLE_ECHANTILLONS = 6
-TIMEOUT_FERMER_MA2    = 180.0    # « ferme grandMA2 onPC »
-TIMEOUT_REBRANCHER    = 120.0    # « rebranche ta wing »
-TIMEOUT_CONNEXION     = 60.0     # attente de « Wing connectée » par usb_loop
+TIMEOUT_REBRANCHER    = 120.0    # carton 7 : « rebranche ta wing » (sans clic)
+TIMEOUT_CONNEXION     = 60.0     # carton 7 : « Wing connectée » par usb_loop
 
 GMA2_ONPC_IMAGE = "gma2onpc.exe"   # process de grandMA2 onPC (vérifié en réel)
 
@@ -198,24 +227,18 @@ def capture_supportee() -> bool:
     return sys.platform.startswith("win") and not _windows_arm()
 
 
-# ── Délai minimum de LISIBILITÉ d'une étape ───────────────────────────────────
-# L'auto-détection franchit une étape dès que sa condition est vraie — parfois
-# INSTANTANÉMENT : wing déjà débranchée, grandMA2 onPC déjà lancé. L'auteur a
-# raté « débranche ta wing » (étape 2) parce qu'elle l'était déjà et l'étape a
-# défilé en une fraction de seconde. Chaque étape reste donc affichée AU MOINS
-# `_PHASE_MIN_S` (ou la valeur `tenir=` passée à `_phase()`) avant que la
-# suivante ne la remplace : l'instruction ne doit jamais « clignoter ». Le
-# délai n'est ajouté QUE si l'étape précédente a duré moins que ça — une étape
-# où l'assistant attend vraiment l'utilisateur (`_attendre`) est déjà au-dessus.
-#
-# ⚠️ Étape 2 (« Débranche ta wing ») : 10 s. 2,5 s ne suffisaient pas quand la
-# wing était déjà débranchée (retour de l'auteur) — c'est le geste
-# le plus facile à manquer, et le rater fait échouer toute la capture
-# (grandMA2 onPC ne repousse le firmware qu'à un BRANCHEMENT).
+# ── Délai minimum de LISIBILITÉ d'un carton ──────────────────────────────────
+# Les transitions entre cartons sont presque toutes déclenchées par un clic
+# « Suivant » : l'utilisateur a lu avant de cliquer, aucun risque de
+# « clignotement ». Il reste les transitions AUTOMATIQUES (carton 7 →
+# « Wing connectée », titres de fin) : chaque carton reste affiché AU MOINS
+# `_PHASE_MIN_S` avant que le suivant ne le remplace, seulement si le
+# précédent a duré moins que ça. L'ancienne surcharge de 10 s sur « Débranche
+# ta wing » (`_PHASE_TENIR`) n'a plus d'objet : ce geste est désormais un
+# carton à clic, il ne peut plus défiler sans être vu.
 _PHASE_MIN_S = 2.5
-_PHASE_TENIR = {2: 10.0}       # surcharges par numéro d'étape
 _phase_horodate = [0.0]        # time.monotonic() du dernier _phase() ; liste = mutable
-_phase_min = [_PHASE_MIN_S]    # combien de temps tenir l'étape EN COURS avant la suivante
+_phase_min = [_PHASE_MIN_S]    # combien de temps tenir le carton EN COURS avant le suivant
 
 
 def _reset_state():
@@ -224,10 +247,14 @@ def _reset_state():
                           "besoin_redemarrage": False, "annule": False,
                           "phase": 0, "phase_total": PHASES_TOTAL,
                           "phase_titre": "", "chemin": None,
-                          "usb_exclusif": False})
+                          "usb_exclusif": False,
+                          "attente_utilisateur": False, "pastilles": [],
+                          "suivant_possible": False, "suivant_cle": None,
+                          "interrompu_au": None})
     _phase_horodate[0] = 0.0   # une 2e capture dans le même process repart propre
     _phase_min[0] = _PHASE_MIN_S
     _ANNULER.clear()           # une annulation ne déborde pas sur la capture suivante
+    _SUIVANT.clear()           # ni un clic « Suivant » resté en suspens
 
 
 def _L(cle, **params):
@@ -276,7 +303,11 @@ def _phase(n, titre, etape=None, **params):
     if etape is not None:
         CAPTURE_STATE["etape"] = wing_i18n.L(etape, **params)
     _phase_horodate[0] = time.monotonic()
-    _phase_min[0] = _PHASE_TENIR.get(n, _PHASE_MIN_S)
+    _phase_min[0] = _PHASE_MIN_S
+    # Un carton neuf repart sans pastille ni « Suivant » : c'est la détection
+    # du carton (ou _attendre_suivant) qui les reposera.
+    CAPTURE_STATE["pastilles"] = []
+    CAPTURE_STATE["suivant_possible"] = False
     _log("journal.fw.capture_phase", n=n, total=PHASES_TOTAL,
          titre=wing_i18n.L_en(titre, **params))
 
@@ -318,9 +349,10 @@ def _attendre(cond, timeout_s: float, intervalle: float = 1.0,
               consecutifs: int = 1) -> bool:
     """Sonde `cond` jusqu'à ce qu'elle rende vrai, ou expiration. Rend bool.
 
-    Sert aux étapes 1 et 2 de l'assistant : on laisse l'utilisateur agir
-    (lancer grandMA2 onPC, débrancher la wing) et la détection fait avancer
-    l'étape toute seule dès que c'est fait.
+    Sert au carton 7 (le seul sans clic : « Rebranche ta wing » → « Wing
+    connectée ») et à `wing_absente_durablement()`. Pour tout carton qui
+    attend un geste de l'utilisateur, c'est `_attendre_suivant()` : la
+    détection ne fait plus avancer, elle ne fait qu'ACTIVER le clic.
 
     `consecutifs` : nombre de sondes `cond()` vraies D'AFFILÉE exigées (1 par
     défaut = le premier vrai suffit). Un échantillon faux — ou une exception —
@@ -347,17 +379,146 @@ def _attendre(cond, timeout_s: float, intervalle: float = 1.0,
     return False
 
 
+class _SondeAbsenceDurable:
+    """Une sonde À ÉTAT : « la wing est-elle PARTIE du bus — pour de bon ? »
+
+    Chaque appel prend UN échantillon `wing_sur_bus()` ; rend vrai seulement
+    après ABSENCE_DURABLE_ECHANTILLONS échantillons « absente » CONSÉCUTIFS
+    (voir la constante : une ré-énumération de ~1,3 s ne doit pas passer pour
+    un débranchement). Un échantillon « présente » — ou une exception —
+    remet la série à zéro. `vus` expose le compte courant, pour que la
+    pastille dise « absente depuis N s — confirmation » plutôt qu'un rouge
+    muet. C'est LA seule implémentation de la règle « absence durable » :
+    `wing_absente_durablement()` (chantier A) et les cartons 1 et 5 de
+    l'assistant passent tous par elle.
+    """
+
+    def __init__(self):
+        self.vus = 0
+
+    def __call__(self) -> bool:
+        try:
+            absente = not wing_sur_bus()
+        except Exception:
+            absente = False
+        self.vus = self.vus + 1 if absente else 0
+        return self.vus >= ABSENCE_DURABLE_ECHANTILLONS
+
+
 def wing_absente_durablement(timeout_s: float, intervalle: float = 1.0) -> bool:
-    """Étape 2 : la wing est-elle PARTIE du bus — pour de bon ?
+    """Bloquant : sonde jusqu'à une absence DURABLE de la wing, ou expiration.
 
     Vrai seulement après ABSENCE_DURABLE_ECHANTILLONS sondes « absente »
-    consécutives (voir la constante pour la justification : une
-    ré-énumération de ~1,3 s ne doit pas passer pour un débranchement).
-    Faux sur expiration ou annulation (`_ANNULER`), comme _attendre().
+    consécutives (_SondeAbsenceDurable). Faux sur expiration ou annulation
+    (`_ANNULER`), comme _attendre(). Conservé du chantier A ; les cartons de
+    l'assistant utilisent la sonde directement, dans `_attendre_suivant()`.
     """
-    return _attendre(lambda: not wing_sur_bus(), timeout_s,
-                     intervalle=intervalle,
-                     consecutifs=ABSENCE_DURABLE_ECHANTILLONS)
+    return _attendre(_SondeAbsenceDurable(), timeout_s, intervalle=intervalle)
+
+
+# ══ L'ATTENTE D'UN CLIC « SUIVANT » ═══════════════════════════════════════
+def _pastille(cle: str, couleur: str, texte_cle: str, **params) -> dict:
+    """Une détection affichable : `couleur` ∈ vert (détecté), rouge (pas
+    détecté, bloque « Suivant »), orange (avertissement, ne bloque pas) —
+    publiée sous la clé `etat` (le paramètre ne s'appelle pas `etat` : il
+    masquerait le module d'état partagé, contrôle 81). Le texte est résolu
+    dans la langue de l'app, comme `etape`."""
+    return {"cle": cle, "etat": couleur, "texte": _L(texte_cle, **params)}
+
+
+def _publier_pastilles(pastilles, attente: bool) -> bool:
+    """Pose les pastilles dans CAPTURE_STATE et en déduit `suivant_possible`.
+
+    `suivant_possible` n'est vrai QUE si l'on attend un clic (`attente`) ET
+    qu'aucune pastille n'est rouge. Pendant une partie automatique
+    (attente=False) il reste faux : le bouton « Suivant » de l'interface ne
+    peut pas mentir. La liste est REMPLACÉE, jamais modifiée en place :
+    /api/status la sérialise depuis un autre thread.
+    """
+    liste = list(pastilles)
+    possible = bool(attente) and bool(liste) and all(
+        p.get("etat") != "rouge" for p in liste)
+    CAPTURE_STATE["pastilles"] = liste
+    CAPTURE_STATE["suivant_possible"] = possible
+    return possible
+
+
+def _attendre_suivant(n: int, detection, timeout_s: float = TIMEOUT_CLIC_S,
+                      intervalle: float = 1.0,
+                      suivant_cle: str = "firmware.suivant.defaut",
+                      abandon=None) -> bool:
+    """Le cœur de l'assistant semi-automatique : attendre le clic « Suivant ».
+
+    Boucle 1×/s : évalue `detection()` (→ liste de pastilles, voir
+    `_pastille`), publie l'état pour l'interface, et ne rend la main QUE
+    quand l'utilisateur a cliqué « Suivant » (`_SUIVANT`, posé par la route
+    POST /api/firmware/capture/suivant) ALORS QUE la détection est verte au
+    moment où le clic est vu. Un clic arrivé au rouge est ignoré et
+    journalisé — jamais mis de côté pour plus tard.
+
+    Rend `True` sur clic valide, `False` sur annulation (`_ANNULER`), sur
+    `abandon()` vrai (une condition extérieure a rendu le carton caduc — ex.
+    l'enregistrement s'est arrêté avant le clic) ou à l'expiration du filet
+    `timeout_s` (TIMEOUT_CLIC_S, 15 min) ; l'appelant choisit alors la fin
+    propre qui convient. Les délais ne font JAMAIS avancer.
+    """
+    _SUIVANT.clear()
+    CAPTURE_STATE["suivant_cle"] = suivant_cle
+    CAPTURE_STATE["attente_utilisateur"] = True
+    fin = time.monotonic() + timeout_s
+    try:
+        while True:
+            if _ANNULER.is_set():
+                return False
+            if abandon is not None:
+                try:
+                    caduc = bool(abandon())
+                except Exception:
+                    caduc = False
+                if caduc:
+                    _log("journal.fw.capture_carton_abandon", n=n)
+                    return False
+            try:
+                pastilles = list(detection())
+            except Exception:
+                pastilles = [_pastille("detection", "rouge",
+                                       "firmware.pastille.detection_erreur")]
+            possible = _publier_pastilles(pastilles, attente=True)
+            if _SUIVANT.is_set():
+                _SUIVANT.clear()
+                if _ANNULER.is_set():      # clic et annulation dans le même tick : l'annulation gagne
+                    return False
+                if possible:
+                    _log("journal.fw.capture_suivant_clic", n=n)
+                    return True
+                _log("journal.fw.capture_suivant_ignore", n=n)
+            if time.monotonic() >= fin:
+                _log("journal.fw.capture_suivant_expire", n=n,
+                     min=int(round(timeout_s / 60.0)))
+                return False
+            # Réveil immédiat sur clic ou annulation, sinon au prochain tick.
+            _SUIVANT.wait(intervalle)
+    finally:
+        CAPTURE_STATE["attente_utilisateur"] = False
+        CAPTURE_STATE["suivant_possible"] = False
+
+
+def suivant_capture() -> dict:
+    """Route POST /api/firmware/capture/suivant : le clic « Suivant ».
+
+    Ne décide RIEN : pose `_SUIVANT`, que `_attendre_suivant()` consomme en
+    vérifiant la détection à cet instant. Refus (code 409) si aucune capture
+    n'est active ou si l'assistant n'attend pas de clic (partie automatique
+    en cours) — un clic qui n'a pas de carton à valider n'est pas gardé.
+    """
+    if not CAPTURE_STATE["actif"]:
+        return {"ok": False, "code": 409, "raison": _L("err.capture_aucune")}
+    if not CAPTURE_STATE["attente_utilisateur"]:
+        return {"ok": False, "code": 409,
+                "raison": _L("err.capture_pas_en_attente")}
+    _SUIVANT.set()
+    return {"ok": True, "carton": CAPTURE_STATE["phase"],
+            "detection_verte": bool(CAPTURE_STATE["suivant_possible"])}
 
 
 def annuler_capture() -> dict:
@@ -765,14 +926,57 @@ def _attendre_termine(status_file: Path, handle, timeout_s: float = 120.0):
 GRACE_APRES_WING_S = 60.0
 
 # ══ CAPTURE ══════════════════════════════════════════════════════════════
+def _fenetre_script_s(timeout_s: float) -> int:
+    """Durée de capture (`TimeoutS`) passée au script élevé — un FILET.
+
+    ⚠️ Ce n'est plus la fenêtre d'enregistrement « utile » (c'est `timeout_s`,
+    tenue côté Python au carton 3). Depuis l'assistant à cartons,
+    l'enregistrement démarre au carton 2 et n'est arrêté (stop.flag) qu'au
+    feu vert de nettoyage, APRÈS les clics des cartons 3, 4 et 5 — parce que
+    le script élevé, une fois sa capture finie, n'attend le feu vert que
+    360 s avant de retirer USBPcap TOUT SEUL (wing_firmware_capture_eleve.ps1,
+    attente de $CleanupFlag — le script ne bouge pas, ses empreintes sont
+    figées). Avec des cartons à clic, ces 360 s pouvaient expirer pendant que
+    grandMA2 onPC tourne encore → retrait à bus occupé, service coincé
+    jusqu'au reboot (docs/WINDOWS.md, « À BUS CALME »). On laisse donc la
+    capture ouverte (quelques Mo de .pcap de plus, rien d'autre) et on
+    dimensionne `TimeoutS` pour que ce soient TOUJOURS les filets Python
+    (4 cartons × TIMEOUT_CLIC_S + l'enregistrement) qui tombent en premier.
+    """
+    return int(4 * TIMEOUT_CLIC_S + timeout_s + GRACE_APRES_WING_S + 120.0)
+
+
+def _pastille_absence(sonde: "_SondeAbsenceDurable") -> dict:
+    """Prend UN échantillon de la sonde et le traduit en pastille : rouge
+    « wing encore là », rouge « absente depuis N s — confirmation », vert
+    « débranchée (plus de 5 s) »."""
+    sonde()
+    n = ABSENCE_DURABLE_ECHANTILLONS - 1       # secondes d'absence exigées à 1 Hz
+    if sonde.vus >= ABSENCE_DURABLE_ECHANTILLONS:
+        return _pastille("wing_absente", "vert",
+                         "firmware.pastille.wing_absente_ok", s=n)
+    if sonde.vus > 0:
+        return _pastille("wing_absente", "rouge",
+                         "firmware.pastille.wing_absente_confirmation",
+                         s=sonde.vus - 1, total=n)
+    return _pastille("wing_absente", "rouge", "firmware.pastille.wing_branchee")
+
+
 def capturer_firmware(timeout_s: float = 150.0) -> dict:
-    """Installe (si besoin) → capture → extrait → désinstalle (si posé par nous).
+    """Assistant semi-automatique à 7 cartons : installe (si besoin) → capture
+    → extrait → désinstalle (si posé par nous) — chaque partie automatique
+    n'étant lancée QUE par le clic « Suivant » du carton précédent
+    (`_attendre_suivant`), actif seulement quand la détection est verte.
 
     Synchrone — pensé pour tourner dans un thread à part (voir
-    demarrer_capture_async), comme core.connect_wing(). Rend le même genre de
-    dict que wing_firmware.enregistrer_firmware : {"ok": bool, "raison": str,
-    "longueur": int}. Met CAPTURE_STATE à jour tout du long pour
-    /api/status → majCapture() côté UI (ui/parametres.js).
+    wing_handler._post_firmware_capture), comme core.connect_wing(). Rend le
+    même genre de dict que wing_firmware.enregistrer_firmware : {"ok": bool,
+    "raison": str, "longueur": int}. Met CAPTURE_STATE à jour tout du long
+    pour /api/status → majCapture() côté UI (ui/parametres.js).
+
+    `timeout_s` : fenêtre d'enregistrement « utile » du carton 3 (temps laissé
+    pour brancher la wing), PAS la durée passée au script élevé — voir
+    `_fenetre_script_s`.
     """
     if not sys.platform.startswith("win"):
         return {"ok": False, "raison": _L("firmware.echec.windows_only")}
@@ -787,6 +991,7 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
     _reset_state()
     CAPTURE_STATE["actif"] = True
     run_dir = None
+    minutes_clic = int(round(TIMEOUT_CLIC_S / 60.0))
     try:
         _etape("firmware.etape.verif_installeur")
         if not os.path.exists(INSTALLER):
@@ -797,55 +1002,50 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
         if not os.path.exists(SCRIPT_CAPTURE):
             return _echec(_L("firmware.echec.script_absent", chemin=SCRIPT_CAPTURE))
 
-        # ── Étape 1/7 — grandMA2 onPC doit tourner : c'est LUI qui pousse le
-        #    firmware à la wing. Sans lui, il n'y a rien à enregistrer. ───────
+        # ── Carton 1/7 — 🟠 Préparation : wing DÉBRANCHÉE et grandMA2 onPC
+        #    lancé. La wing doit être partie AVANT que l'enregistrement ne
+        #    s'ouvre : grandMA2 onPC ne (re)pousse le firmware qu'à un
+        #    branchement, et c'est cet instant précis qu'on enregistre. Absence
+        #    DURABLE exigée (_SondeAbsenceDurable, chantier A) : sur l'Asus le
+        #    12/11/2026 un seul échantillon « absente » avait suffi à avancer
+        #    sans débranchement. Et c'est grandMA2 onPC qui pousse le firmware :
+        #    sans lui, rien à enregistrer. Les deux pastilles vertes ⇒ le clic
+        #    « Suivant » (qui lance l'autorisation Windows) devient possible. ──
         _phase(1, "firmware.phase.1.titre", "firmware.phase.1.etape")
-        if not gma2_onpc_lance():
-            _etape("firmware.etape.ma2_absent")
-            if not _attendre(gma2_onpc_lance, TIMEOUT_ATTENTE_MA2):
-                if _ANNULER.is_set():
-                    return _annule_resultat()
-                return _echec(_L("firmware.echec.ma2_non_detecte"))
-        _etape("firmware.etape.ma2_ok")
+        sonde1 = _SondeAbsenceDurable()
 
-        # ── Étape 2/7 — la wing doit être DÉBRANCHÉE au départ : grandMA2 onPC
-        #    ne (re)pousse le firmware qu'à un branchement, c'est cet instant
-        #    précis qu'on enregistre. ────────────────────────────────────────
-        _phase(2, "firmware.phase.2.titre", "firmware.phase.2.etape")
-        if wing_sur_bus():
-            _etape("firmware.etape.debranche_wing")
-        # ⚠️ Absence DURABLE exigée (ABSENCE_DURABLE_ECHANTILLONS sondes
-        # d'affilée), et TOUJOURS, même si la wing paraît déjà absente : un
-        # échantillon isolé ne prouve rien. Asus, 12/11/2026 (tentative 1) :
-        # l'étape 2 a avancé sans aucun débranchement, puis « wing revue sur le
-        # bus » — un seul échantillon « absente » suffisait alors. Cette attente
-        # remplace l'ancien `sleep(1.0)` « laisser l'énumération se stabiliser ».
-        if not wing_absente_durablement(TIMEOUT_DEBRANCHEMENT):
-            if _ANNULER.is_set():
+        def _detection_1():
+            ma2 = gma2_onpc_lance()
+            return [_pastille_absence(sonde1),
+                    _pastille("ma2", "vert" if ma2 else "rouge",
+                              "firmware.pastille.ma2_ok" if ma2
+                              else "firmware.pastille.ma2_ko")]
+
+        if not _attendre_suivant(1, _detection_1,
+                                 suivant_cle="firmware.suivant.autorisation"):
+            if _ANNULER.is_set():      # annulée avant toute élévation : rien à nettoyer
                 return _annule_resultat()
-            return _echec(_L("firmware.echec.wing_branchee"))
-        _etape("firmware.etape.wing_debranchee")
-        if _ANNULER.is_set():        # annulée avant toute élévation : rien à nettoyer
-            return _annule_resultat()
+            return _echec(_L("firmware.echec.clic_expire", n=1, min=minutes_clic))
 
         deja_present = usbpcap_present()
         # Lu AVANT que ce run ne réécrive le flag : si une tentative PRÉCÉDENTE
         # a laissé USBPcap en place exprès (cas « redémarrage requis », voir
         # wing_firmware_capture_eleve.ps1), ce run le trouvera « déjà présent »
         # (deja_present=True) sans savoir que c'est NOUS qui l'avons posé — sauf
-        # à consulter ce flag persistant. Sert au nettoyage différé en fin de
-        # fonction, une fois la capture enfin réussie.
+        # à consulter ce flag persistant. Sert au nettoyage différé au carton 6,
+        # une fois la capture enfin réussie.
         installe_par_nous_avant = _lire_etat_installe()
         run_dir = Path(tempfile.mkdtemp(prefix="wingfw_"))
         status_file = run_dir / "status.json"
         stop_flag = run_dir / "stop.flag"
         cleanup_flag = run_dir / "cleanup.flag"
 
-        # ── Étape 3/7 — une seule invite UAC, puis le script élevé installe
-        #    USBPcap (si absent) et lance la capture. ─────────────────────────────
-        # D'ici à la fin du nettoyage USBPcap, l'app LÂCHE le bus USB (usb_loop
-        # consulte `usb_exclusif`) : le script élevé redémarre les root hubs, et
-        # grandMA2 onPC doit pouvoir pousser le firmware.
+        # ── Carton 2/7 — ⚙️ Lancé par le clic du carton 1 : une seule invite
+        #    UAC, puis le script élevé installe USBPcap (si absent), attache le
+        #    filtre à chaud et ouvre l'enregistrement. ───────────────────────────
+        # D'ici à la fin du retrait d'USBPcap (carton 6), l'app LÂCHE le bus USB
+        # (usb_loop consulte `usb_exclusif`) : le script élevé redémarre les
+        # root hubs, et grandMA2 onPC doit pouvoir pousser le firmware.
         # ⚠️ Poser le drapeau ne fait qu'ANNONCER l'intention : on ATTEND la preuve que
         # la poignée est relâchée (`etat.E.DEV[0] is None`) avant de lancer l'élévation
         # — sinon usb_loop pouvait être en plein `dev.read()` au redémarrage des hubs.
@@ -861,14 +1061,17 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                 _log("journal.fw.capture_boucle_pas_relachee")
         except Exception:
             pass
-        _phase(3, "firmware.phase.3.titre", "firmware.phase.3.etape")
+        _phase(2, "firmware.phase.2.titre", "firmware.phase.2.etape")
+        _publier_pastilles([_pastille("autorisation", "rouge",
+                                      "firmware.pastille.preparation")],
+                           attente=False)
         # 🔒 L'installeur passe par `fichiers` : l'amorce le COPIE et le
         # revérifie côté élevé — la vérification de plus haut, faite ici en
         # non élevé, ne sert plus qu'à échouer tôt avec un message clair.
         handle, ok_lance, err = _lancer_eleve(
             SCRIPT_CAPTURE, SCRIPT_CAPTURE_SHA256, {
                 "DejaPresent": "1" if deja_present else "0",
-                "TimeoutS": str(int(timeout_s)),
+                "TimeoutS": str(_fenetre_script_s(timeout_s)),
                 "StatusFile": str(status_file),
                 "StopFlag": str(stop_flag),
                 "WorkDir": str(run_dir),
@@ -878,130 +1081,52 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
         if not ok_lance:
             return _echec(_L("firmware.echec.elevation", err=err))
 
-        blob = None
-        pcap_vus = []
-        wing_vue_ts = None          # quand la wing est réapparue pendant l'étape 4
-        # ── Ce que l'étape 4 a VU — lecture seule, ne pilote rien ───────────
-        # `wing_deja_la` : la wing était DÉJÀ sur le bus à l'ouverture de
-        # l'enregistrement. Constat Asus 12/11/2026 : wing jamais débranchée,
-        # firmware poussé AVANT l'enregistrement → « aucun transfert », et
-        # l'ancien message envoyait vérifier grandMA2 onPC, qui tournait.
-        # `None` tant que l'étape 4 n'est pas ouverte. Sert UNIQUEMENT à
-        # choisir le message d'échec (`_cle_aucun_transfert`).
-        # `grace_signalee` : la fenêtre de grâce ne s'écrit qu'UNE fois au
-        # journal (sans ce drapeau, la ligne repartait à chaque tour de 1 s
-        # jusqu'à ce que le script élevé confirme l'arrêt).
-        wing_deja_la = None
-        grace_signalee = False
-        deadline = time.time() + timeout_s + 60.0   # marge install + désinstall
-        st = {}
-        while time.time() < deadline:
-            if _ANNULER.is_set():
-                _log("journal.fw.capture_annul_pendant")
-                try:
-                    stop_flag.write_text("stop", encoding="utf-8")
-                except OSError:
-                    pass
-                break
+        st_box = [{}]           # dernier statut lu du script élevé (boîte = mutable)
+
+        def _statut() -> dict:
             nouveau = _lire_status(status_file)
             if nouveau:
-                st = nouveau
-                pcap_vus = st.get("pcap_files") or pcap_vus
-                et = st.get("etape") or ""
-                # Le script élevé passe en capture → étape 4 : « branche ta
-                # wing ». On remplace le « capture en cours sur N interface(s) »
-                # brut par une consigne qui suit l'USB en direct.
-                if "capture en cours" in et and CAPTURE_STATE["phase"] < 4:
-                    _phase(4, "firmware.phase.4.titre")
-                    _log("journal.fw.capture_iface", et=et)
-                    # Un seul échantillon, pris une fois l'étape 4 affichée
-                    # (donc APRÈS le remontage des hubs du script élevé, et
-                    # avant que la consigne « branche ta wing » ait pu être
-                    # suivie). Wing présente ici = elle n'a pas été
-                    # (re)branchée pendant l'enregistrement.
-                    wing_deja_la = wing_sur_bus()
-                    if wing_deja_la:
-                        _log("journal.fw.capture_wing_deja_la")
-                if (blob is None and CAPTURE_STATE["phase"] == 4
-                        and not st.get("termine")):
-                    _etape("firmware.etape.wing_detectee" if wing_sur_bus()
-                           else "firmware.etape.branche_wing")
-                elif CAPTURE_STATE["phase"] < 4 and et:
-                    _etape(et)
+                st_box[0] = nouveau
+            return st_box[0]
 
-            if blob is None:
-                for pf in pcap_vus:
-                    if not os.path.exists(pf):
-                        continue
-                    try:
-                        candidat = fwx.extract_from_pcapng(pf)
-                    except Exception:
-                        continue
-                    ok_v, _msg = fwx.verify(candidat)
-                    if ok_v:
-                        blob = candidat
-                        _etape("firmware.etape.blob_ok")
-                        _log("journal.fw.capture_blob_ok")
-                        try:
-                            stop_flag.write_text("stop", encoding="utf-8")
-                        except OSError:
-                            pass
-                        break
-
-            # ── Marge après retour de la wing ───────────────────────────────
-            # Une fois la wing revue sur le bus pendant l'étape 4, on donne
-            # GRACE_APRES_WING_S à grandMA2 onPC pour pousser le firmware et à
-            # l'extraction pour trouver un blob. Passé ce délai sans rien :
-            # on demande l'arrêt de la capture (stop.flag) plutôt que d'attendre
-            # le timeout complet.
-            # ⚠️ Ce bloc vient APRÈS la passe d'extraction, et son message ne
-            # conclut PAS : le verdict n'est pas acquis ici. Sur l'Asus le
-            # 12/11/2026, « sans transfert exploitable — arrêt de la capture »
-            # est sorti juste AVANT « blob valide extrait » — l'extraction
-            # continue tant que le script élevé n'a pas confirmé l'arrêt
-            # (`capture_finie`), et c'est cette dernière passe qui a trouvé le
-            # firmware. stop.flag et délais sont inchangés.
-            if (blob is None and CAPTURE_STATE["phase"] == 4
-                    and not st.get("termine")):
-                if wing_sur_bus():
-                    if wing_vue_ts is None:
-                        wing_vue_ts = time.time()
-                        _log("journal.fw.capture_fenetre", s=int(GRACE_APRES_WING_S))
-                    elif time.time() - wing_vue_ts > GRACE_APRES_WING_S:
-                        if not grace_signalee:
-                            grace_signalee = True
-                            _log("journal.fw.capture_fenetre_ecoulee",
-                                 s=int(GRACE_APRES_WING_S))
-                        try:
-                            stop_flag.write_text("stop", encoding="utf-8")
-                        except OSError:
-                            pass
-
-            if st.get("termine") or st.get("capture_finie"):
-                # `capture_finie` : le script élevé a fini de capturer et ATTEND
-                # notre feu vert de nettoyage (cleanup.flag). Le blob est trouvé
-                # ou ne le sera plus — on sort pour enchaîner les étapes 5-7.
-                break
-            if not _process_vivant(handle) and not st.get("termine"):
-                # Le script élevé a disparu sans se marquer « terminé » —
-                # crash, ou tué de l'extérieur. On ne bloque pas indéfiniment.
-                time.sleep(1.0)
-                st = _lire_status(status_file) or st
-                break
-            time.sleep(1.0)
+        def _demander_arret():
+            try:
+                stop_flag.write_text("stop", encoding="utf-8")
+            except OSError:
+                pass
 
         def _feu_vert_nettoyage():
+            # stop.flag D'ABORD : depuis l'assistant à cartons, l'enregistrement
+            # tourne encore à cet instant (voir _fenetre_script_s) — sans lui le
+            # script attendrait sa propre échéance avant de voir cleanup.flag.
+            _demander_arret()
             try:
                 cleanup_flag.write_text("go", encoding="utf-8")
             except OSError:
                 pass
 
-        # ── ÉCHEC ou ANNULATION : rien capturé — libérer le script élevé pour
-        #    qu'il nettoie USBPcap tout de suite, puis rendre la main. ─────────
-        if blob is None:
+        blob = None
+        pcap_vus = []
+        enregistrement = False      # le script a-t-il annoncé « capture en cours » ?
+        wing_vue_ts = None          # quand la wing est réapparue pendant le carton 3
+        # ── Ce que le carton 3 a VU — lecture seule, ne pilote rien ─────────
+        # `wing_deja_la` : la wing était DÉJÀ sur le bus à l'ouverture du
+        # carton 3. Constat Asus 12/11/2026 : wing jamais débranchée, firmware
+        # poussé AVANT l'enregistrement → « aucun transfert », et l'ancien
+        # message envoyait vérifier grandMA2 onPC, qui tournait. `None` tant
+        # que le carton 3 n'est pas ouvert. Sert UNIQUEMENT à choisir le
+        # message d'échec (`_cle_aucun_transfert`).
+        wing_deja_la = None
+
+        def _fin_echec(raison_filet: str = None) -> dict:
+            """ÉCHEC ou ANNULATION : rien capturé — libérer le script élevé
+            pour qu'il nettoie USBPcap tout de suite, puis rendre la main.
+            `raison_filet` : raison imposée par un filet de temps (clic
+            « Suivant » jamais venu), prioritaire sur le diagnostic « aucun
+            transfert », mais pas sur une erreur rapportée par le script."""
             annule = _ANNULER.is_set()
             _feu_vert_nettoyage()
-            st = _attendre_termine(status_file, handle) or st
+            st = _attendre_termine(status_file, handle) or st_box[0]
             installed_by_us = bool(st.get("installed_by_us"))
             uninstall_ok = st.get("uninstall_ok")
             garder_flag = _garder_flag_verifie(installed_by_us, uninstall_ok)
@@ -1028,22 +1153,205 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                 CAPTURE_STATE["besoin_redemarrage"] = True
                 return _echec(st.get("erreur") or
                               _L("firmware.echec.besoin_redemarrage"))
-            # Contexte de l'échec, pour le diagnostic après coup : ce que
-            # l'étape 4 a vu, et si grandMA2 onPC tourne encore à cet instant.
+            # Contexte de l'échec, pour le diagnostic après coup : ce que le
+            # carton 3 a vu, et si grandMA2 onPC tourne encore à cet instant.
             ma2_tourne = gma2_onpc_lance()
             _log("journal.fw.capture_echec_contexte",
                  deja=wing_deja_la,
                  s=(int(time.time() - wing_vue_ts) if wing_vue_ts else "—"),
                  ma2=ma2_tourne)
-            raison = _L(_cle_aucun_transfert(
-                enregistrement_ouvert=CAPTURE_STATE["phase"] >= 4,
-                wing_deja_la=wing_deja_la,
-                wing_vue=wing_vue_ts is not None,
-                ma2_tourne=ma2_tourne)) + residu
             erreur_script = st.get("erreur")
             if erreur_script:
                 raison = f"{erreur_script}{residu}"
+            elif raison_filet:
+                raison = raison_filet + residu
+            elif not enregistrement:
+                # La préparation (carton 2) n'a jamais ouvert l'enregistrement :
+                # dire OÙ le script en était, pas « aucun transfert » (le Dell
+                # XPS 7590 a eu droit onze fois à ce message hors sujet).
+                raison = _L("firmware.echec.preparation_pas_aboutie",
+                            s=int(TIMEOUT_PREPARATION_S),
+                            etape=st.get("etape") or "—") + residu
+            else:
+                raison = _L(_cle_aucun_transfert(
+                    enregistrement_ouvert=CAPTURE_STATE["phase"] >= 3,
+                    wing_deja_la=wing_deja_la,
+                    wing_vue=wing_vue_ts is not None,
+                    ma2_tourne=ma2_tourne)) + residu
+            if CAPTURE_STATE["phase"] >= 3:
+                # La pastille « firmware capturé » du carton 3 porte la raison,
+                # en rouge — l'interface y accroche « Réessayer ».
+                _publier_pastilles([
+                    _pastille("wing_vue", "vert" if wing_vue_ts else "rouge",
+                              "firmware.pastille.wing_vue_ok" if wing_vue_ts
+                              else "firmware.pastille.wing_vue_ko"),
+                    _pastille("blob", "rouge", "firmware.pastille.blob_ko",
+                              raison=raison)], attente=False)
             return _echec(raison)
+
+        # Préparation (UAC, installation, attache à chaud) : on suit le statut
+        # brut du script jusqu'à « capture en cours ». Filet :
+        # TIMEOUT_PREPARATION_S — le Dell XPS 7590 est resté figé ici 5 min 30.
+        fin_prep = time.time() + TIMEOUT_PREPARATION_S
+        while True:
+            if _ANNULER.is_set():
+                _log("journal.fw.capture_annul_pendant")
+                break
+            st = _statut()
+            et = st.get("etape") or ""
+            if et:
+                _etape(et)          # statut brut du script élevé (installation, hubs…)
+            if "capture en cours" in et and not st.get("termine"):
+                enregistrement = True
+                pcap_vus = st.get("pcap_files") or pcap_vus
+                _log("journal.fw.capture_iface", et=et)
+                break
+            if st.get("termine") or st.get("capture_finie"):
+                break
+            if not _process_vivant(handle) and not st.get("termine"):
+                # Le script élevé a disparu sans se marquer « terminé » —
+                # crash, ou tué de l'extérieur. On ne bloque pas indéfiniment.
+                time.sleep(1.0)
+                _statut()
+                break
+            if time.time() >= fin_prep:
+                _log("journal.fw.capture_preparation_expiree",
+                     s=int(TIMEOUT_PREPARATION_S))
+                break
+            time.sleep(1.0)
+        if not enregistrement:
+            return _fin_echec()
+
+        # L'enregistrement tourne : pastille verte, « Suivant » possible. Le
+        # carton reste tant que l'utilisateur ne clique pas — l'enregistrement
+        # continue pendant ce temps (voir _fenetre_script_s). `abandon` : si
+        # le script s'arrête avant le clic, le carton est caduc.
+        n_iface = st_box[0].get("iface_count", "?")
+
+        def _enregistrement_tourne() -> bool:
+            st = _statut()
+            return (not st.get("termine") and not st.get("capture_finie")
+                    and _process_vivant(handle))
+
+        def _detection_2():
+            tourne = _enregistrement_tourne()
+            return [_pastille("enregistrement", "vert" if tourne else "rouge",
+                              "firmware.pastille.enregistrement_ok" if tourne
+                              else "firmware.pastille.enregistrement_ko",
+                              n=n_iface)]
+
+        _etape("firmware.phase.2.etape_fait")
+        if not _attendre_suivant(2, _detection_2,
+                                 abandon=lambda: not _enregistrement_tourne()):
+            if _ANNULER.is_set() or not _enregistrement_tourne():
+                return _fin_echec()
+            return _fin_echec(_L("firmware.echec.clic_expire", n=2,
+                                 min=minutes_clic))
+
+        # ── Carton 3/7 — 🟠 Branche ta wing → ⚙️ attente du transfert +
+        #    extraction. La wing doit apparaître MAINTENANT, pendant que
+        #    l'enregistrement tourne ; grandMA2 onPC lui pousse son firmware
+        #    en ~2-3 s, l'extraction tourne sur les .pcap en cours d'écriture. ─
+        _phase(3, "firmware.phase.3.titre", "firmware.phase.3.etape")
+        # Un seul échantillon, pris à l'ouverture du carton 3 (donc APRÈS le
+        # remontage des hubs du script élevé, et avant que la consigne
+        # « branche ta wing » ait pu être suivie). Wing présente ici = elle n'a
+        # pas été (re)branchée pendant l'enregistrement.
+        wing_deja_la = wing_sur_bus()
+        if wing_deja_la:
+            _log("journal.fw.capture_wing_deja_la")
+        # `grace_signalee` : la fenêtre de grâce ne s'écrit qu'UNE fois au
+        # journal (sans ce drapeau, la ligne repartait à chaque tour de 1 s
+        # jusqu'à ce que le script élevé confirme l'arrêt).
+        grace_signalee = False
+        deadline = time.time() + timeout_s
+        while True:
+            if _ANNULER.is_set():
+                _log("journal.fw.capture_annul_pendant")
+                _demander_arret()
+                break
+            st = _statut()
+            pcap_vus = st.get("pcap_files") or pcap_vus
+            sur_bus = wing_sur_bus()
+            if blob is None and not st.get("termine"):
+                _etape("firmware.etape.wing_detectee" if sur_bus
+                       else "firmware.etape.branche_wing")
+
+            if blob is None:
+                for pf in pcap_vus:
+                    if not os.path.exists(pf):
+                        continue
+                    try:
+                        candidat = fwx.extract_from_pcapng(pf)
+                    except Exception:
+                        continue
+                    ok_v, _msg = fwx.verify(candidat)
+                    if ok_v:
+                        blob = candidat
+                        _etape("firmware.etape.blob_ok")
+                        _log("journal.fw.capture_blob_ok")
+                        # ⚠️ PAS de stop.flag ici (contrairement à l'assistant
+                        # automatique d'avant) : arrêter la capture ferait
+                        # démarrer les 360 s au bout desquelles le script
+                        # retire USBPcap seul — voir _fenetre_script_s. Le
+                        # stop vient avec le feu vert, au carton 6.
+                        break
+
+            # ── Marge après retour de la wing ───────────────────────────────
+            # Une fois la wing revue sur le bus pendant le carton 3, on donne
+            # GRACE_APRES_WING_S à grandMA2 onPC pour pousser le firmware et à
+            # l'extraction pour trouver un blob. Passé ce délai sans rien :
+            # on demande l'arrêt de la capture (stop.flag) plutôt que d'attendre
+            # la fenêtre complète.
+            # ⚠️ Ce bloc vient APRÈS la passe d'extraction, et son message ne
+            # conclut PAS : le verdict n'est pas acquis ici. Sur l'Asus le
+            # 12/11/2026, « sans transfert exploitable — arrêt de la capture »
+            # est sorti juste AVANT « blob valide extrait » — l'extraction
+            # continue tant que le script élevé n'a pas confirmé l'arrêt
+            # (`capture_finie`), et c'est cette dernière passe qui a trouvé le
+            # firmware. stop.flag et délais sont inchangés.
+            if blob is None and not st.get("termine"):
+                if sur_bus:
+                    if wing_vue_ts is None:
+                        wing_vue_ts = time.time()
+                        # La grâce doit pouvoir aller à son terme même si la
+                        # wing arrive en toute fin de fenêtre.
+                        deadline = max(deadline,
+                                       wing_vue_ts + GRACE_APRES_WING_S + 15.0)
+                        _log("journal.fw.capture_fenetre", s=int(GRACE_APRES_WING_S))
+                    elif time.time() - wing_vue_ts > GRACE_APRES_WING_S:
+                        if not grace_signalee:
+                            grace_signalee = True
+                            _log("journal.fw.capture_fenetre_ecoulee",
+                                 s=int(GRACE_APRES_WING_S))
+                        _demander_arret()
+
+            _publier_pastilles([
+                _pastille("wing_vue", "vert" if sur_bus else "rouge",
+                          "firmware.pastille.wing_vue_ok" if sur_bus
+                          else "firmware.pastille.wing_vue_ko"),
+                _pastille("blob", "vert" if blob is not None else "rouge",
+                          "firmware.pastille.blob_ok" if blob is not None
+                          else "firmware.pastille.blob_attente",
+                          o=len(blob) if blob is not None else 0)],
+                attente=False)
+            if blob is not None:
+                break
+            if st.get("termine") or st.get("capture_finie"):
+                # `capture_finie` : le script élevé a fini de capturer (grâce
+                # écoulée → stop.flag) et ATTEND notre feu vert de nettoyage.
+                # Le blob est trouvé ou ne le sera plus.
+                break
+            if not _process_vivant(handle) and not st.get("termine"):
+                time.sleep(1.0)
+                _statut()
+                break
+            if time.time() >= deadline:
+                break
+            time.sleep(1.0)
+
+        if blob is None:
+            return _fin_echec()
 
         # ── SUCCÈS : persister le firmware AVANT toute autre manip ───────────
         res = wing_firmware.enregistrer_firmware(blob)
@@ -1059,35 +1367,76 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
         except Exception:
             core = None
         residu_reprise = ""
+        # `interrompu` : annulation ou filet APRÈS la sauvegarde du firmware.
+        # On ne jette rien (le firmware est en place), on saute les gestes
+        # restants et on va droit au retrait d'USBPcap, puis à une fin
+        # « partielle » qui dit ce qui reste à faire. `interrompu_au` : le
+        # carton où ça s'est arrêté (l'interface marque les suivants « sautés »,
+        # pas « faits »).
+        interrompu = False
 
-        # ── Étape 5/7 — Ferme grandMA2 onPC : son pilote (OnPCWingDeviceClass,
+        def _interrompre():
+            nonlocal interrompu
+            if not interrompu:
+                interrompu = True
+                CAPTURE_STATE["interrompu_au"] = CAPTURE_STATE["phase"]
+
+        # Le firmware est SAUVÉ : la pastille le dit, « Suivant » s'ouvre. La
+        # wing peut rester branchée ou non (orange, sans incidence).
+        def _detection_3():
+            sur_bus = wing_sur_bus()
+            return [_pastille("wing_vue", "vert" if sur_bus else "orange",
+                              "firmware.pastille.wing_vue_ok" if sur_bus
+                              else "firmware.pastille.wing_vue_info"),
+                    _pastille("blob", "vert", "firmware.pastille.blob_ok",
+                              o=res["longueur"])]
+
+        if not _attendre_suivant(3, _detection_3):
+            _interrompre()
+
+        # ── Carton 4/7 — 🟠 Ferme grandMA2 onPC : son pilote (OnPCWingDeviceClass,
         #    « onPC Wing for onPC2 Software ») TIENT la wing tant qu'il tourne —
         #    Wing Bridge (libusb/WinUSB) ne peut pas la reprendre avant, ET un
         #    root hub occupé par MA2 ne se remonte pas proprement (le retrait de
-        #    USBPcap ci-dessous laisserait alors le service bloqué). ──────────
-        _phase(5, "firmware.phase.5.titre", "firmware.phase.5.etape")
-        ma2_ferme = True
-        if gma2_onpc_lance():
-            ma2_ferme = _attendre(lambda: not gma2_onpc_lance(), TIMEOUT_FERMER_MA2)
-            if not ma2_ferme:
+        #    USBPcap au carton 6 laisserait alors le service bloqué). ──────────
+        if not interrompu:
+            _phase(4, "firmware.phase.4.titre", "firmware.phase.4.etape")
+
+            def _detection_4():
+                ouvert = gma2_onpc_lance()
+                return [_pastille("ma2_ferme", "rouge" if ouvert else "vert",
+                                  "firmware.pastille.ma2_ferme_ko" if ouvert
+                                  else "firmware.pastille.ma2_ferme_ok")]
+
+            if not _attendre_suivant(4, _detection_4):
+                _interrompre()
                 residu_reprise = _L("firmware.residu.ma2_reste_ouvert")
 
-        # ── Étape 6/7 — Débranche ta wing : bus au calme (MA2 fermé + wing
+        # ── Carton 5/7 — 🟠 Débranche ta wing : bus au calme (MA2 fermé + wing
         #    partie) = la seule condition pour retirer USBPcap sans laisser le
-        #    service bloqué jusqu'au reboot. ─────────────────────────────────
-        if ma2_ferme:
+        #    service bloqué jusqu'au reboot. Absence DURABLE, même sonde qu'au
+        #    carton 1. Le clic « Suivant » lance le retrait. ─────────────────
+        if not interrompu:
             time.sleep(1.5)   # laisser le pilote de MA2 relâcher la wing
-            _phase(6, "firmware.phase.6.titre", "firmware.phase.6.etape")
-            if wing_sur_bus():
-                if not _attendre(lambda: not wing_sur_bus(), TIMEOUT_DEBRANCHEMENT):
-                    _log("journal.fw.capture_wing_pas_debranchee")
+            _phase(5, "firmware.phase.5.titre", "firmware.phase.5.etape")
+            sonde5 = _SondeAbsenceDurable()
+            if not _attendre_suivant(5, lambda: [_pastille_absence(sonde5)],
+                                     suivant_cle="firmware.suivant.retrait"):
+                _interrompre()
+                _log("journal.fw.capture_wing_pas_debranchee")
             time.sleep(1.0)
 
-        # ── Feu vert : le script élevé retire USBPcap MAINTENANT ─────────────
+        # ── Carton 6/7 — ⚙️ Retrait d'USBPcap, lancé par le clic du carton 5 :
+        #    stop.flag + cleanup.flag → le script élevé arrête la capture,
+        #    détache le filtre et désinstalle. ────────────────────────────────
+        _phase(6, "firmware.phase.6.titre", "firmware.phase.6.etape")
         _etape("firmware.etape.retrait_composant")
+        _publier_pastilles([_pastille("retrait", "rouge",
+                                      "firmware.pastille.retrait_en_cours")],
+                           attente=False)
         _log("journal.fw.capture_feu_vert")
         _feu_vert_nettoyage()
-        st = _attendre_termine(status_file, handle) or st
+        st = _attendre_termine(status_file, handle) or st_box[0]
 
         installed_by_us = bool(st.get("installed_by_us"))
         uninstall_ok = st.get("uninstall_ok")
@@ -1104,14 +1453,46 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
             residu = "" if res_retrait.get("ok") else (
                 _L("firmware.residu.usbpcap_tentative_precedente"))
 
-        # ── L'app peut reprendre le bus pour l'étape 7 ──────────────────────
+        # ── L'app peut reprendre le bus pour le carton 7 ────────────────────
         CAPTURE_STATE["usb_exclusif"] = False
 
-        # ── Étape 7/7 — Rebranche ta wing → Wing Bridge la reprend ──────────
-        if not residu_reprise:
+        if residu:
+            # Orange : avertissement non bloquant — le firmware est en place,
+            # le bouton de secours et le message de fin prennent le relais.
+            pastille6 = _pastille("retrait", "orange", "firmware.pastille.retrait_ko")
+        elif installed_by_us or installe_par_nous_avant:
+            pastille6 = _pastille("retrait", "vert", "firmware.pastille.retrait_ok")
+        else:
+            pastille6 = _pastille("retrait", "vert",
+                                  "firmware.pastille.retrait_sans_objet")
+        _etape("firmware.phase.6.etape_fait")
+        if not interrompu:
+            if not _attendre_suivant(6, lambda: [pastille6],
+                                     suivant_cle="firmware.suivant.rebrancher"):
+                _interrompre()
+        else:
+            _publier_pastilles([pastille6], attente=False)
+
+        # ── Carton 7/7 — 🟠 Rebranche ta wing → Wing Bridge la reprend. Le seul
+        #    carton sans clic : « Wing connectée » EST la fin. ────────────────
+        if not interrompu:
             _phase(7, "firmware.phase.7.titre", "firmware.phase.7.etape")
-            if not (core and etat.E.STATE.get("wing")):
-                _attendre(wing_sur_bus, TIMEOUT_REBRANCHER)
+
+            def _etat_7():
+                sur_bus = wing_sur_bus()
+                connectee = bool(core and etat.E.STATE.get("wing"))
+                _publier_pastilles([
+                    _pastille("rebranche", "vert" if (sur_bus or connectee) else "rouge",
+                              "firmware.pastille.rebranche_ok" if (sur_bus or connectee)
+                              else "firmware.pastille.rebranche_ko"),
+                    _pastille("connectee", "vert" if connectee else "rouge",
+                              "firmware.pastille.connectee_ok" if connectee
+                              else "firmware.pastille.connectee_ko")],
+                    attente=False)
+                return sur_bus, connectee
+
+            if not _etat_7()[1]:
+                _attendre(lambda: _etat_7()[0], TIMEOUT_REBRANCHER)
                 time.sleep(1.0)
                 if core is not None and not etat.E.STATE.get("wing"):
                     try:
@@ -1120,24 +1501,29 @@ def capturer_firmware(timeout_s: float = 150.0) -> dict:
                             daemon=True).start()
                     except Exception:
                         pass
-                if not _attendre(lambda: bool(core and etat.E.STATE.get("wing")),
-                                 TIMEOUT_CONNEXION):
+                if not _attendre(lambda: _etat_7()[1], TIMEOUT_CONNEXION):
                     residu_reprise = _L("firmware.residu.wing_pas_reprise")
 
+        if interrompu and not residu_reprise:
+            residu_reprise = _L("firmware.residu.assistant_interrompu")
+        pastilles_fin = list(CAPTURE_STATE["pastilles"])
         note_finale = (residu or "") + residu_reprise
         ok_complet = not residu_reprise
-        _phase(7 if ok_complet else 6,
+        _phase(7 if ok_complet else CAPTURE_STATE["phase"],
                "firmware.phase.fin.titre_ok" if ok_complet
                else "firmware.phase.fin.titre_partiel",
                "firmware.phase.fin.etape_ok" if ok_complet
                else "firmware.phase.fin.etape_partiel",
                o=res['longueur'], chemin=chemin, residu=residu_reprise)
+        _publier_pastilles(pastilles_fin, attente=False)   # _phase() les avait vidées
         CAPTURE_STATE["ok"] = True
         CAPTURE_STATE["note"] = note_finale or None
         return {"ok": True, "longueur": res["longueur"], "residu": note_finale,
                 "chemin": chemin}
     finally:
         CAPTURE_STATE["usb_exclusif"] = False
+        CAPTURE_STATE["attente_utilisateur"] = False
+        CAPTURE_STATE["suivant_possible"] = False
         if run_dir is not None:
             if CAPTURE_STATE.get("ok") is not True:
                 try:

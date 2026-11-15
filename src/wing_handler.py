@@ -328,6 +328,7 @@ class Handler(BaseHTTPRequestHandler):
         ("/api/firmware/export", "_post_firmware_export"),
         ("/api/firmware/capture", "_post_firmware_capture"),
         ("/api/firmware/capture/cancel", "_post_firmware_capture_cancel"),
+        ("/api/firmware/capture/suivant", "_post_firmware_capture_suivant"),
         ("/api/firmware/remove_capture_component", "_post_firmware_remove_capture_component"),
         ("/api/plugin/install", "_post_plugin_install"),
         ("/api/plugin/relaunch", "_post_plugin_relaunch"),
@@ -1516,6 +1517,28 @@ class Handler(BaseHTTPRequestHandler):
         if res.get("annulation"):
             core.log("journal.fw.capture_annulee")
         self._json(res)
+
+    def _post_firmware_capture_suivant(self, body):
+        """Bouton « Suivant » d'un carton de l'assistant de capture.
+
+        Ne décide rien : pose l'événement que `_attendre_suivant()`
+        (wing_firmware_capture) consomme en revérifiant la détection À CET
+        INSTANT — un clic au rouge est ignoré et journalisé côté capture,
+        jamais mis de côté. 409 si aucune capture n'est active ou si
+        l'assistant n'attend pas de clic (partie automatique en cours).
+        Même protection que /cancel : POST, origine et jeton (do_POST).
+        Pas de garde `sys.platform` ici : hors Windows il n'y a jamais de
+        capture active, la réponse est le même 409 — et le test de fumée
+        (section 49) peut l'exercer sur toute plateforme.
+        """
+        try:
+            import wing_firmware_capture as fwc
+        except Exception as e:
+            self._json({"ok": False, "raison": _L("err.module_capture_absent", err=e)})
+            return
+        res = fwc.suivant_capture()
+        code = res.pop("code", 200)
+        self._json(res, code)
 
     def _post_firmware_remove_capture_component(self, body):
         import wing_ui as core

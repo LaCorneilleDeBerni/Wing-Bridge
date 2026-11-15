@@ -165,7 +165,11 @@ firmware, connecting to the wing is blocked **cleanly** (never a crash).
 On a **Windows x64 PC**, the app additionally offers an **integrated capture**:
 it temporarily installs the capture tool, reads the firmware while grandMA2 onPC
 pushes it to the wing, then **uninstalls it** (unless it was already present).
-Details in the **Help** tab and in [`docs/HARDWARE.md`](docs/HARDWARE.md).
+The assistant is a sequence of **7 cards**, each with its own detection dots:
+nothing automatic starts until you click **Next**, and Next is only enabled
+once the card's detections are green (not yet tested on a Windows machine
+since this rewrite). Details in the **Help** tab and in
+[`docs/HARDWARE.md`](docs/HARDWARE.md).
 
 ### The interface tabs
 

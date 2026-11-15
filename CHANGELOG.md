@@ -9,6 +9,15 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- **Firmware capture assistant is now semi-automatic: 7 cards confirmed by
+  you.** The two known failures (Dell, Asus 2026-11-12) came from an assistant
+  that moved on by itself on a false or premature detection. Each card now
+  shows its detection dots (green / red / orange) and waits for a **Next**
+  click, enabled only when the detections are green; the automatic parts
+  (Windows permission + USBPcap install, extraction, USBPcap removal) only
+  start on that click, and a click arriving while a detection is red is
+  ignored and logged. Timeouts are safety nets behind the click, not
+  drivers. Not yet tested on a Windows machine.
 - Help and diagnostic texts about grandMA3's OSC page no longer say just
   “`Interface` ≠ `<None>`”: `Interface` must be consistent with `Preferred IP`
   and the destination (local MA3: `lo0 (127.0.0.1)` + `127.0.0.0/8` +

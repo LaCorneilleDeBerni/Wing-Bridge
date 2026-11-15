@@ -582,27 +582,93 @@ fois, `retirer_composant_capture()` est appelé en fin de fonction — pour ne p
 laisser USBPcap installé indéfiniment simplement parce que le run qui a réussi
 n'était pas celui qui l'avait posé.
 
-### L'assistant 7 étapes
+### L'assistant 7 cartons (semi-automatique)
 
-La capture est un assistant numéroté (barre `1/7 … 7/7`), chaque étape débloquée
-par une détection — pas de sous-endpoints, une machine à états dans
-`capturer_firmware()`. `CAPTURE_STATE` porte `phase`, `phase_total`,
-`phase_titre`, `chemin`, lus par `/api/status`.
+**Réécrit le 13/11/2026 (branche `correctifs-v1.0.2`), NON testé sur une
+vraie machine Windows** — vérifié par le contrôle 49 du test de fumée
+(primitives, route, audit de source, JS dans node) et par réinjection de
+chaque bug surveillé ; le chemin réel (UAC, USBPcap, grandMA2 onPC) reste à
+exécuter sur l'Asus.
 
-| # | Consigne | Débloqué par |
-|---|---|---|
-| 1 | Lance grandMA2 onPC sur ce PC | `gma2onpc.exe` présent (`tasklist /FI`, ré-interrogé à chaque sondage — même principe que `pgrep`) |
-| 2 | Débranche ta wing | `wing_init._trouver()` → `None` (le primitif exact d'`usb_loop` ; wing déjà débranchée → étape sautée) |
-| 3 | Préparation (UAC + install USBPcap + attache à chaud) | script élevé |
-| 4 | Branche ta wing — puis ne la débranche plus | blob Hello valide extrait du `.pcap` (le firmware est **sauvegardé dès ici** ; une étape 5-7 qui expire ne perd rien) |
-| 5 | Ferme grandMA2 onPC | `gma2onpc.exe` **absent** (son pilote tient la wing) |
-| 6 | Débranche ta wing → l'assistant retire USBPcap | wing absente + `cleanup.flag` posé (bus au calme) |
-| 7 | Rebranche ta wing → Wing connectée | `etat.E.STATE["wing"]` (nudge `connect_wing(force=True)`) |
+**Pourquoi.** Les deux échecs connus (Dell XPS 7590, 09-10/10 ; Asus,
+12/11 tentative 1) viennent d'un assistant qui **avançait tout seul** sur une
+détection fausse ou trop tôt. Décision de l'auteur (13/11/2026) : **plus rien
+d'automatique ne part sans un clic « Suivant », et « Suivant » n'est actif que
+quand la détection du carton est verte.** Les délais (`TIMEOUT_*`) ne sont
+plus des moteurs d'avancement : ce sont des **filets** derrière le clic.
 
-`usb_loop` se retire du bus pendant les phases 3-4 + nettoyage (drapeau dédié
-`CAPTURE_STATE["usb_exclusif"]`, **jamais** `actif` qui couvre aussi les pré-vols
-1-2 et la reprise 5-7 où `usb_loop` doit au contraire tourner). Fenêtre de
-capture 150 s + `GRACE_APRES_WING_S` (60 s après le retour de la wing).
+**Mécanique** (`wing_firmware_capture.py`) : une primitive
+`_attendre_suivant(n, detection, abandon=…)` boucle 1×/s, évalue
+`detection()` → une liste de **pastilles** `{cle, etat, texte}` (🟢 `vert` =
+détecté · 🔴 `rouge` = pas détecté, bloque · 🟠 `orange` = avertissement, ne
+bloque pas), publie dans `CAPTURE_STATE` (`pastilles`, `attente_utilisateur`,
+`suivant_possible`, `suivant_cle`) et ne rend la main que si l'utilisateur a
+cliqué « Suivant » (événement `_SUIVANT`, posé par la route
+`POST /api/firmware/capture/suivant` — jeton + origine comme `/cancel`, **409**
+si aucune capture active ou si l'assistant n'attend pas de clic) **alors que
+la détection est verte à l'instant où le clic est vu** : un clic arrivé au
+rouge est **ignoré et journalisé** (`journal.fw.capture_suivant_ignore`).
+Annulation respectée partout ; filet `TIMEOUT_CLIC_S = 900 s` (15 min) par
+carton → fin propre (USBPcap retiré) avec `firmware.echec.clic_expire`.
+L'interface (`ui/parametres.js`, `_fwCaptureCartons`) ne décide rien : elle
+rend les 7 cartons depuis `s.capture` (fait / en cours / à venir / sauté),
+n'active « Suivant » que sur `suivant_possible` (`fwSuivantActif`, fonction
+pure exécutée dans node par le smoke), et déplace l'unique bloc Suivant /
+Réessayer / Annuler dans le carton en cours — plus de barre `1/7 … 7/7`.
+
+| # | Carton | Pastilles (🟢 quand…) | Ce que le clic « Suivant » déclenche |
+|---|---|---|---|
+| 1 | 🟠 Préparation | **wing débranchée** (absence durable : 6 sondes « absente » d'affilée, `_SondeAbsenceDurable`, le seuil du chantier A) **et** **grandMA2 onPC lancé** (`gma2_onpc_lance`) | ⚙️ carton 2 : élévation (UAC), installation d'USBPcap, enregistrement |
+| 2 | ⚙️ Autorisation Windows | **enregistrement en cours** (le statut du script dit « capture en cours » et le script vit) — filet `TIMEOUT_PREPARATION_S = 300 s` avant ce vert ; `abandon` si l'enregistrement s'arrête avant le clic | carton 3 |
+| 3 | 🟠 Branche ta wing | **wing vue sur le bus** (`wing_sur_bus`) puis ⚙️ **firmware capturé** (blob valide extrait ; fenêtre `timeout_s` = 150 s pour voir la wing, puis `GRACE_APRES_WING_S` = 60 s, chantier B compris : le verdict vient après la dernière passe d'extraction). Le firmware est **sauvegardé dès ici**. Échec → pastille rouge avec la raison (`_cle_aucun_transfert`, chantier B) et bouton **« Réessayer »** = nettoyage propre puis retour au carton 1 (relance de `/api/firmware/capture`) | carton 4 |
+| 4 | 🟠 Ferme grandMA2 onPC | `gma2onpc.exe` **absent** | carton 5 |
+| 5 | 🟠 Débranche ta wing | absence durable (même sonde qu'au carton 1) | ⚙️ carton 6 : `stop.flag` + `cleanup.flag` → retrait d'USBPcap |
+| 6 | ⚙️ Retrait d'USBPcap | `uninstall_ok` (vert) ; 🟠 orange si le retrait n'est pas confirmé (message de fin + bouton de secours) ; « déjà présent avant : laissé en place » sinon | carton 7 (`usb_exclusif` retombe, nudge `connect_wing(force=True)`) |
+| 7 | 🟠 Rebranche ta wing | **wing sur le bus** puis **Wing connectée** (`etat.E.STATE["wing"]`) — le seul carton sans clic : « Wing connectée » **est** la fin | — |
+
+**Après la sauvegarde du firmware** (carton 3), une annulation ou un filet
+n'est plus un échec : l'assistant note `interrompu_au`, file au carton 6
+(retrait d'USBPcap) et finit en « partiel » (`firmware.residu.assistant_interrompu`
+ou `ma2_reste_ouvert`) ; l'interface marque les cartons sautés « sauté », pas
+« fait ».
+
+⚠️ **Conséquence sur le script élevé (qui ne bouge pas, empreintes figées) :**
+une fois sa capture finie, `wing_firmware_capture_eleve.ps1` n'attend
+`cleanup.flag` que **360 s** avant de retirer USBPcap **tout seul**. Avec des
+cartons à clic (3 → 4 → 5), ces 360 s pouvaient expirer pendant que grandMA2
+onPC tourne encore → retrait à bus occupé, service coincé jusqu'au reboot
+(section « À BUS CALME » ci-dessus). L'assistant **n'écrit donc plus
+`stop.flag` à l'extraction du blob** : l'enregistrement reste ouvert jusqu'au
+feu vert du carton 6 (`_feu_vert_nettoyage` écrit `stop.flag` **puis**
+`cleanup.flag` ; coût : quelques Mo de `.pcap` de plus), et `TimeoutS` passé au
+script vaut `_fenetre_script_s(timeout_s)` = 4 × `TIMEOUT_CLIC_S` +
+`timeout_s` + grâce + 120 s (≈ 65 min) pour que ce soient **toujours les
+filets Python qui tombent en premier**. Le contrôle 49 (2) refuse une fenêtre
+plus courte (vu rouge par réinjection de l'ancien `int(timeout_s)`).
+
+**`usb_loop`** se retire du bus du carton 2 jusqu'à la fin du retrait d'USBPcap
+(drapeau `CAPTURE_STATE["usb_exclusif"]`, **jamais** `actif`, qui couvre aussi
+le carton 1 et le carton 7 où `usb_loop` doit au contraire tourner).
+
+**Journal attendu d'une passe complète** (clés `journal.fw.*`) :
+`capture_phase 1/7` → `capture_suivant_clic carton 1` → `capture_phase 2/7` →
+`capture_iface` → `capture_suivant_clic carton 2` → `capture_phase 3/7` →
+`capture_fenetre` → `capture_blob_ok` → `capture_suivant_clic carton 3` →
+`capture_phase 4/7` → `…clic carton 4` → `capture_phase 5/7` → `…clic carton 5`
+→ `capture_phase 6/7` → `capture_feu_vert` → `capture_script_termine
+(uninstall_ok=True)` → `…clic carton 6` → `capture_phase 7/7` → « Wing
+connectée ». Un `capture_suivant_ignore` signale un clic arrivé au rouge
+(interface en retard d'un poll de 400 ms) : il n'avance pas.
+
+**Ce que le smoke prouve / ne prouve pas.** Section 49, sous-contrôles (1)-(4),
+chacun vu ROUGE par réinjection le 13/11/2026 (clic au rouge accepté ;
+élévation sans le clic du carton 1 ; « Suivant » toujours actif dans le JS ;
+route acceptant un clic sans capture ; `TimeoutS` ramené à 150 s ; carton 5
+revenu à un échantillon unique), puis vert. Ça prouve que le code n'avance
+plus sans clic ni au rouge ; ça ne prouve **pas** que les détections réelles
+(tasklist, libusb, statut du script) se comportent comme prévu sur Windows :
+c'est l'objet de la vérification sur l'Asus (liste dans le rapport du chantier
+E et dans `ETAT_PROJET.md`).
 
 ### 🔴 Échec constaté sur un Dell XPS 7590 — cause NON établie (09-10/10/2026)
 
@@ -689,13 +755,16 @@ d'intervalle (5 s : le **même seuil** que la boucle USB, `ABSENCE_REELLE_S =
 5.0` dans `wing_ui.py`, pour la même question « la wing est-elle vraiment
 partie ? » — et bien plus que la ré-énumération de ~1,3 s mesurée dans
 `HARDWARE.md`), via `wing_absente_durablement()` (`_attendre()` a gagné un
-paramètre générique `consecutifs`, les autres appels sont inchangés). La valeur
+paramètre générique `consecutifs`, les autres appels sont inchangés ; depuis
+le 13/11 la règle vit dans `_SondeAbsenceDurable`, partagée avec les cartons
+1 et 5 de l'assistant semi-automatique — voir plus bas). La valeur
 est recopiée, pas importée (pas de `wing_ui` au niveau module) : le contrôle 49
 refuse qu'elle passe sous `ABSENCE_REELLE_S`. L'attente
 est faite **même si la wing paraît déjà absente** au premier coup d'œil, et
 remplace l'ancien `sleep(1.0)` de stabilisation. La consigne de l'étape 1 fait
 maintenant **débrancher la wing avant** de lancer grandMA2 onPC
-(`firmware.phase.1.titre`, `firmware.etape.ma2_absent`, fr + en). Le contrôle
+(`firmware.phase.1.titre`, `firmware.etape.ma2_absent` — cette dernière
+remplacée le 13/11 par les pastilles du carton 1, fr + en). Le contrôle
 49 du test de fumée simule `wing_sur_bus()` rendant T, F, T, T puis F×6 et
 vérifie que le F isolé n'avance pas, que la série avance, que les
 clignements perpétuels expirent et que l'annulation coupe net — vu ROUGE par
