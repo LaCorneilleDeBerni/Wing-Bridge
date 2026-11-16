@@ -19,18 +19,61 @@
 // propose une commande que l'app ne saurait pas envoyer.
 let assistant = {actif: false, etapes: [], i: 0, faites: 0, aLanceLearn: false};
 
+// ── Les deux modes de configuration s'excluent mutuellement ────────────
+// Source de vérité UNIQUE de l'état des deux boutons de l'onglet Touches
+// (« Mode apprentissage » et « Configuration guidée »). Fonction PURE : elle
+// ne lit aucun état global, pour que le test de fumée l'exécute telle quelle
+// dans node. Règles : un seul mode à la fois ; le bouton du mode en cours
+// devient SON PROPRE bouton d'arrêt ; l'autre est grisé (on ne peut plus
+// éteindre un mode avec l'autre). Appelée par poll() ET par les gestionnaires,
+// pour que l'état reste cohérent après un poll ou un F5 (le serveur peut être
+// en « learn » alors que l'assistant, lui, est perdu : apprentissage simple).
+function etatBoutonsApprentissage(mode, assistantActif) {
+  const learnSimple = mode === "learn" && !assistantActif;
+  return {
+    learn: {
+      libelleCle: learnSimple ? "ui.touches.bouton.apprentissage_arret"
+                              : "ui.touches.bouton.apprentissage",
+      desactive: !!assistantActif
+    },
+    assistant: {
+      libelleCle: assistantActif ? "ui.touches.bouton.guidee_arret"
+                                 : "ui.touches.bouton.guidee",
+      desactive: learnSimple
+    }
+  };
+}
+
+function appliquerBoutonsApprentissage() {
+  const e = etatBoutonsApprentissage(currentMode, assistant.actif);
+  const lb = document.getElementById("learnBtn");
+  const ab = document.getElementById("btnAssistant");
+  lb.textContent = t(e.learn.libelleCle);
+  lb.disabled = e.learn.desactive;
+  ab.textContent = t(e.assistant.libelleCle);
+  ab.disabled = e.assistant.desactive;
+}
+
+// Le même bouton démarre et arrête la configuration guidée.
+function assistantBasculer() {
+  if (assistant.actif) return assistantArreter(false);
+  return assistantDemarrer();
+}
+
 async function assistantDemarrer() {
-  if (assistant.actif) return;
+  // Un seul mode à la fois : refusé si l'assistant tourne déjà, ou si un
+  // apprentissage simple est en cours (le bouton est alors grisé aussi).
+  if (assistant.actif || currentMode === "learn") return;
   let d;
   try { d = await (await fetch("/api/assistant")).json(); }
   catch (e) { return; }
   const aLanceLearn = currentMode !== "learn";
   assistant = {actif: true, etapes: d.etapes, i: 0, faites: 0, aLanceLearn: aLanceLearn};
+  appliquerBoutonsApprentissage();      // grise tout de suite l'apprentissage
   if (aLanceLearn) await api("/api/mode", {mode: "learn"});
   await api("/api/learn/clear", {});
   document.getElementById("assistantPanneau").style.display = "";
   document.getElementById("assignForm").style.display = "none";
-  document.getElementById("btnAssistant").disabled = true;
   assistantAfficher();
 }
 
@@ -75,7 +118,7 @@ async function assistantReculer() {
 async function assistantArreter(fini) {
   assistant.actif = false;
   document.getElementById("assistantPanneau").style.display = "none";
-  document.getElementById("btnAssistant").disabled = false;
+  appliquerBoutonsApprentissage();
   document.getElementById("assistantEtat").textContent =
     fini ? plural("ui.touches.assistant.fini", assistant.faites)
          : plural("ui.touches.assistant.arrete", assistant.faites);
@@ -104,6 +147,7 @@ function showAssignForm(key) {
 }
 
 async function toggleLearn() {
+  if (assistant.actif) return;   // la configuration guidée a la main : on ne l'éteint pas d'ici
   const m = currentMode === "learn" ? "idle" : "learn";
   await api("/api/mode", {mode: m});
   document.getElementById("assignForm").style.display = "none";

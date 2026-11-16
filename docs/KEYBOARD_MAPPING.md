@@ -144,6 +144,8 @@ Paramètres, route `/api/reprise_bridge`. Contrôle : `_reprise_apres_guide`
 dans `smoke_hardware.py` (section 23). Non éprouvé sur une vraie wing : voir
 `docs/ETAT_PROJET.md`.
 
+Exclusion mutuelle des deux modes : un seul à la fois. Le bouton du mode en cours devient son propre bouton d'arrêt (« ⏹ Arrêter l'apprentissage » / « ⏹ Arrêter la configuration guidée ») et l'autre est grisé ; l'état des deux boutons vient d'une seule fonction pure, `etatBoutonsApprentissage` (`ui/touches.js`), appelée par `poll()` et par les gestionnaires (après un F5 pendant un apprentissage, l'assistant est perdu : apprentissage simple). Contrôle : (h) dans la section 23.
+
 ## Changement de page + migration des raccourcis
 
 ### Les deux chemins, par un seul token

@@ -333,6 +333,7 @@
   "ui.entete.build_ecart": "\n\n⚠️ Numéros différents : normal après un build serveur seul.\nSi tu ne sais pas pourquoi, refais un build complet.",
   "ui.profils.ref_jamais": "jamais définie",
   "ui.touches.bouton.apprentissage_arret": "⏹ Arrêter l'apprentissage",
+  "ui.touches.bouton.guidee_arret": "⏹ Arrêter la configuration guidée",
   "ui.bridge.buf.label_console": "MODE CONSOLE",
   "ui.bridge.buf.console_txt": "→ les touches sont tapées directement dans grandMA3",
   "ui.bridge.buf.label_interne": "LIGNE DE COMMANDE (interne)",

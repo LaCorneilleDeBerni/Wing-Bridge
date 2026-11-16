@@ -439,6 +439,10 @@ def test_boutons_honnetes(ui):
         # ── g) apprentissage / configuration guidée lancé(e) bridge actif :
         #       le bridge repart à la fin (voir _reprise_apres_guide) ─────────
         _reprise_apres_guide(ui)
+
+        # ── h) « Mode apprentissage » et « Configuration guidée » s'excluent :
+        #       un seul à la fois, le même bouton démarre ET arrête ───────────
+        _exclusion_apprentissage_guide()
     except Exception as e:
         echec("le contrôle des boutons a levé une exception",
               f"{type(e).__name__}: {e}")
@@ -572,6 +576,102 @@ def _reprise_apres_guide(ui):
         ok("reprise du bridge après un apprentissage : bridge actif -> repart ; "
            "inactif -> reste inactif ; option décochée, wing absente ou arrachage "
            "-> jamais de reprise")
+
+
+def _exclusion_apprentissage_guide():
+    """(h) Apprentissage et configuration guidée : jamais les deux à la fois.
+
+    Constat de l'auteur (test réel, build #255) : on pouvait allumer l'un
+    quand l'autre tournait, et éteindre l'un avec l'autre. Règle : un seul
+    mode ; le bouton du mode en cours devient SON PROPRE bouton d'arrêt ;
+    l'autre est grisé. La décision vit dans `etatBoutonsApprentissage`
+    (ui/touches.js), fonction pure EXÉCUTÉE ici dans node avec les quatre
+    combinaisons (repos / apprentissage simple / assistant / les deux, cas
+    d'un F5 pendant un assistant). Audit de source (commentaires retirés) :
+    `toggleLearn` et `assistantDemarrer` ont leur garde, poll() passe par la
+    même fonction, et le bouton de l'assistant appelle `assistantBasculer`.
+    """
+    import subprocess
+    js = (HERE / "ui" / "touches.js").read_text(encoding="utf-8")
+    html = (HERE / "wing_ui.html").read_text(encoding="utf-8")
+    poll_js = (HERE / "ui" / "bridge.js").read_text(encoding="utf-8")
+
+    def corps(src, nom):
+        m = re.search(r"^(?:async )?function " + nom + r"\(.*?^\}", src, re.S | re.M)
+        return re.sub(r"//[^\n]*", "", m.group(0)) if m else None
+
+    defauts = []
+    f_etat = re.search(r"^function etatBoutonsApprentissage\(.*?^\}", js, re.S | re.M)
+    if not f_etat:
+        echec("(h) etatBoutonsApprentissage introuvable dans ui/touches.js")
+        return
+    tl, ad = corps(js, "toggleLearn"), corps(js, "assistantDemarrer")
+    if not tl or "if (assistant.actif) return" not in tl:
+        defauts.append("toggleLearn n'a plus sa garde « assistant actif » : "
+                       "l'apprentissage s'éteindrait pendant la configuration guidée")
+    if not ad or 'currentMode === "learn"' not in ad.split("await")[0]:
+        defauts.append("assistantDemarrer n'a plus sa garde « apprentissage "
+                       "en cours » : on pourrait lancer les deux modes")
+    if "appliquerBoutonsApprentissage();" not in (corps(poll_js, "poll") or ""):
+        defauts.append("poll() ne passe plus par appliquerBoutonsApprentissage")
+    if 'id="btnAssistant" onclick="assistantBasculer()"' not in html:
+        defauts.append("le bouton de l'assistant n'appelle plus assistantBasculer "
+                       "(il ne serait plus son propre bouton d'arrêt)")
+    if "data-i18n-dynamic" not in re.search(r'<button[^>]*id="btnAssistant"[^>]*>', html, re.S).group(0):
+        defauts.append("btnAssistant n'est plus data-i18n-dynamic : un changement "
+                       "de langue écraserait son libellé d'arrêt")
+
+    node = None
+    for cand in ("node", "/opt/homebrew/bin/node", "/usr/local/bin/node"):
+        try:
+            subprocess.run([cand, "--version"], capture_output=True, timeout=5)
+            node = cand
+            break
+        except Exception:
+            continue
+    if not node:
+        note("(h) node introuvable — fonction pure non exécutée (audit statique seul)")
+    else:
+        script = (f_etat.group(0) + "\nconst R = [];"
+                  "\nfor (const mode of ['idle','bridge','learn'])"
+                  " for (const a of [false, true])"
+                  " R.push({mode, a, e: etatBoutonsApprentissage(mode, a)});"
+                  "\nprocess.stdout.write(JSON.stringify(R));")
+        r = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=20)
+        if r.returncode != 0:
+            echec("(h) etatBoutonsApprentissage a planté dans node", r.stderr[:300])
+            return
+        fr = json.loads((HERE / "locales" / "fr.json").read_text(encoding="utf-8"))
+        en = json.loads((HERE / "locales" / "en.json").read_text(encoding="utf-8"))
+        for c in json.loads(r.stdout):
+            mode, a, e = c["mode"], c["a"], c["e"]
+            nom = f"mode={mode}, assistant={'actif' if a else 'arrêté'}"
+            learn_actif = mode == "learn" and not a
+            if (a or learn_actif) and not (e["learn"]["desactive"] or e["assistant"]["desactive"]):
+                defauts.append(f"{nom} : un mode tourne et les deux boutons sont actifs")
+            if a and not e["learn"]["desactive"]:
+                defauts.append(f"{nom} : l'apprentissage n'est pas grisé pendant l'assistant")
+            if learn_actif and not e["assistant"]["desactive"]:
+                defauts.append(f"{nom} : l'assistant n'est pas grisé pendant l'apprentissage")
+            if a and e["assistant"]["libelleCle"] != "ui.touches.bouton.guidee_arret":
+                defauts.append(f"{nom} : le bouton de l'assistant n'est pas l'arrêt")
+            if learn_actif and e["learn"]["libelleCle"] != "ui.touches.bouton.apprentissage_arret":
+                defauts.append(f"{nom} : le bouton d'apprentissage n'est pas l'arrêt")
+            if not a and not learn_actif and (
+                    e["learn"]["desactive"] or e["assistant"]["desactive"]
+                    or e["learn"]["libelleCle"] != "ui.touches.bouton.apprentissage"
+                    or e["assistant"]["libelleCle"] != "ui.touches.bouton.guidee"):
+                defauts.append(f"{nom} : au repos, libellés d'origine et boutons actifs attendus")
+            for cle in (e["learn"]["libelleCle"], e["assistant"]["libelleCle"]):
+                for lang, cat in (("fr", fr), ("en", en)):
+                    if cle not in cat:
+                        defauts.append(f"{cle} absente de {lang}.json")
+    if defauts:
+        echec("(h) exclusion apprentissage / configuration guidée", "\n".join(sorted(set(defauts))[:6]))
+    else:
+        ok("(h) apprentissage / configuration guidée : jamais les deux à la fois "
+           "(6 combinaisons exécutées dans node), le bouton du mode en cours est "
+           "son propre arrêt, gardes de toggleLearn et assistantDemarrer présentes")
 
 
 # Ce qu'une pastille/bannière « firmware absent » n'a PAS le droit de dire à

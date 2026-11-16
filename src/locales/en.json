@@ -333,6 +333,7 @@
   "ui.entete.build_ecart": "\n\n⚠️ Different numbers: normal after a server-only build.\nIf you don't know why, do a full build again.",
   "ui.profils.ref_jamais": "never set",
   "ui.touches.bouton.apprentissage_arret": "⏹ Stop learning",
+  "ui.touches.bouton.guidee_arret": "⏹ Stop guided setup",
   "ui.bridge.buf.label_console": "CONSOLE MODE",
   "ui.bridge.buf.console_txt": "→ keystrokes are typed directly into grandMA3",
   "ui.bridge.buf.label_interne": "COMMAND LINE (internal)",

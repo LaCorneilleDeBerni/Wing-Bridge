@@ -19,6 +19,10 @@ the project aims for [semantic versioning](https://semver.org/).
   stopped. It never restarts if the wing is unplugged, and a new
   “Guided setup” checkbox in Settings (checked by default, saved in
   `settings.json`) turns this off to get the previous behaviour.
+- “Learning mode” and “Guided setup” (Keys tab) are now mutually exclusive:
+  starting one greys out the other, and the running one's own button becomes its
+  stop button (“Stop learning” / “Stop guided setup”), so neither can be started
+  or stopped from the other any more.
 
 ## [1.0.2] — 2026-11-16
 

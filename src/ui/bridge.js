@@ -291,15 +291,12 @@ async function poll() {
     }
 
     // Learn button
-    const lb = document.getElementById("learnBtn");
     const lz = document.getElementById("learnZone");
-    if (s.mode === "learn") {
-      lb.textContent = t("ui.touches.bouton.apprentissage_arret");
-      lz.classList.add("waiting");
-    } else {
-      lb.textContent = t("ui.touches.bouton.apprentissage");
-      lz.classList.remove("waiting");
-    }
+    // Libellés et grisage des DEUX boutons : une seule source,
+    // etatBoutonsApprentissage() (ui/touches.js).
+    appliquerBoutonsApprentissage();
+    if (s.mode === "learn") lz.classList.add("waiting");
+    else lz.classList.remove("waiting");
 
     // Buffer + log
     const bufEl = document.getElementById("bufTxt");
