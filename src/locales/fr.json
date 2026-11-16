@@ -154,7 +154,7 @@
   "ui.param.gma3.plugin_label": "Plugin (sonde Lua) →",
   "ui.param.gma3.plugin_slot_label": "Emplacement du plugin →",
   "ui.param.gma3.plugin_slot_tip": "Emplacement (slot) du pool Plugins de MA3 où l'installation automatique importe l'amorce. 1 par défaut — change-le si ce slot est déjà pris par un autre plugin.",
-  "ui.param.gma3.plugin_slot_appliquer": "Appliquer",
+  "ui.param.gma3.plugin_slot_appliquer": "🧩 Installer / réinstaller",
   "ui.param.gma3.plugin_slot_avertissement": "⚠️ Changer l'emplacement après une installation précédente peut laisser l'ancien emplacement muet (plus de réponse, même à une relance) — retire-le à la main dans le pool Plugins de MA3 (clic droit → Delete) si tu n'en as plus besoin.",
   "ui.param.gma3.relancer": "🔁 Relancer le plugin dans grandMA3",
   "ui.param.fw.plugin_arrete_court": "⚠️ Plugin arrêté",

@@ -1281,6 +1281,18 @@ async function savePluginSlot(valeur, msgElId) {
   }
 }
 
+// Bouton « Installer / réinstaller » de la carte grandMA3 : un clic = enregistre
+// l'emplacement saisi PUIS installe (copie + import OSC + vérif sonde).
+async function pluginSlotInstaller() {
+  const champ = document.getElementById("pluginSlotInput");
+  const bouton = document.getElementById("pluginSlotInstallBtn");
+  if (bouton) bouton.disabled = true;
+  try {
+    if (champ) await savePluginSlot(champ.value, "pluginSlotMsg");
+    await pluginInstaller("pluginSlotMsg");
+  } finally { if (bouton) bouton.disabled = false; }
+}
+
 function majParametresGma3(s) {
   if (!s) return;
   majMiseEnRoute(s);   // assistant de mise en route (chantier 3a)

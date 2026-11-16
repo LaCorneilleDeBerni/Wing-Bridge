@@ -154,7 +154,7 @@
   "ui.param.gma3.plugin_label": "Plugin (Lua probe) →",
   "ui.param.gma3.plugin_slot_label": "Plugin location →",
   "ui.param.gma3.plugin_slot_tip": "Location (slot) in MA3's Plugins pool where the automatic install imports the loader. 1 by default — change it if that slot is already taken by another plugin.",
-  "ui.param.gma3.plugin_slot_appliquer": "Apply",
+  "ui.param.gma3.plugin_slot_appliquer": "🧩 Install / reinstall",
   "ui.param.gma3.plugin_slot_avertissement": "⚠️ Changing the location after a previous install can leave the old location unresponsive (no reply, even to a restart) — remove it by hand in MA3's Plugins pool (right-click → Delete) if you no longer need it.",
   "ui.param.gma3.relancer": "🔁 Restart the plugin in grandMA3",
   "ui.param.fw.plugin_arrete_court": "⚠️ Plugin stopped",

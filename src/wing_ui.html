@@ -883,7 +883,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       <input type="number" id="pluginSlotInput" min="1" max="9999"
              style="width:70px;text-align:center" placeholder="1"
              title="Emplacement (slot) du pool Plugins de MA3 où l'installation automatique importe l'amorce. 1 par défaut — change-le si ce slot est déjà pris par un autre plugin." data-i18n-title="ui.param.gma3.plugin_slot_tip">
-      <button class="btn" onclick="savePluginSlot(document.getElementById('pluginSlotInput').value, 'pluginSlotMsg')" data-i18n="ui.param.gma3.plugin_slot_appliquer">Appliquer</button>
+      <button class="btn primary" id="pluginSlotInstallBtn" onclick="pluginSlotInstaller()" data-i18n="ui.param.gma3.plugin_slot_appliquer">🧩 Installer / réinstaller</button>
       <span class="muted" id="pluginSlotMsg" style="font-size:12.5px"></span>
     </div>
     <!-- Mesuré en réel le 11/09/2026 (docs/GRANDMA3_SYNC.md, section dédiée) :
