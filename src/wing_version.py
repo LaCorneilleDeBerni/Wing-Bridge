@@ -3,5 +3,5 @@
 # Le moteur et l'assistant clavier embarquent chacun le numéro du build qui les
 # a produits : s'ils diffèrent dans l'interface, c'est qu'un build serveur seul
 # a eu lieu depuis (normal), ou qu'un bundle a été mélangé (à surveiller).
-BUILD = 261
-BUILD_DATE = "16/11/2026 14:37"
+BUILD = 262
+BUILD_DATE = "16/11/2026 15:02"
