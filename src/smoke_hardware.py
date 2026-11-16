@@ -637,6 +637,17 @@ def _exclusion_apprentissage_guide():
             defauts.append(f"le « ? » du mode {mode} a disparu")
         if not re.search(r'id="aideMode_' + mode + r'" style="display:none"', html):
             defauts.append(f"le résumé du mode {mode} n'est plus replié par défaut")
+    # Pas d'infobulle de survol sur UN seul des deux boutons (constat de
+    # l'auteur : « ça explique un mode mais pas l'autre ») : l'explication vit
+    # dans le « ? ».
+    for bid in ("learnBtn", "btnAssistant"):
+        m_b = re.search(r'<button[^>]*id="' + bid + r'"[^>]*>', html)
+        if not m_b or " title=" in m_b.group(0) or "data-i18n-title" in m_b.group(0):
+            defauts.append(f"le bouton {bid} a une infobulle de survol (ou a disparu) : "
+                           "l'explication des modes vit dans le « ? »")
+    if html.count('class="rangee-mode"') < 2:
+        defauts.append("les deux boutons de mode ne partagent plus le même gabarit "
+                       "(rangee-mode) : tailles et alignement différeraient")
     if "function basculerAideMode" not in js:
         defauts.append("basculerAideMode a disparu de ui/touches.js")
     if 'id="btnAssistant" onclick="assistantBasculer()"' not in html:

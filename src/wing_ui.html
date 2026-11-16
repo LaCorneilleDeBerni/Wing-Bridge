@@ -232,9 +232,11 @@ button.btn.big { font-size: 15px; padding: 12px 24px; }
 /* Bouton inactif : grisé, curseur interdit, aucun survol (chantier F, 16/11/2026 :
    « Suivant » bloqué mais resté jaune plein). Placé APRÈS .primary/.green pour
    l'emporter sur leur fond ; vaut pour tous les boutons .btn désactivés. */
-.rangee-mode { display:flex; align-items:center; justify-content:center; gap:8px; }
-  .btn-aide { width:26px; height:26px; border-radius:50%; border:1px solid var(--border, #555); background:transparent;
-              color:inherit; font-weight:700; cursor:pointer; padding:0; line-height:1; }
+.rangee-mode { display:flex; align-items:center; justify-content:center; gap:10px; margin:10px 0; }
+  .rangee-mode .btn.big { width:340px; }
+  .btn-aide { align-self:stretch; aspect-ratio:1 / 1; height:auto; border-radius:50%;
+              border:1px solid var(--border, #555); background:transparent; color:inherit;
+              font-size:18px; font-weight:700; cursor:pointer; padding:0; line-height:1; }
   .btn-aide:hover { background:rgba(255,255,255,.12); }
   .aide-mode { margin:8px auto; max-width:640px; padding:8px 12px; border-radius:6px;
                background:rgba(255,255,255,.06); font-size:13px; line-height:1.45; }
@@ -567,18 +569,17 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
     <button class="btn big primary" id="learnBtn" onclick="toggleLearn()" data-i18n="ui.touches.bouton.apprentissage" data-i18n-dynamic>🎯 Mode apprentissage</button>
       <button class="btn-aide" onclick="basculerAideMode('apprentissage')" data-i18n-title="ui.touches.aide.tip" title="Explication rapide de ce mode" aria-label="?">?</button>
     </div>
-    <div class="aide-mode" id="aideMode_apprentissage" style="display:none" data-i18n-html="ui.touches.aide.apprentissage"><b>Mode apprentissage</b> : tu appuies sur une touche de la wing, l'app la reconnaît et te propose de lui donner une commande MA3 (Store, Fixture…) ou un executor. Flash, Temp et Swap restent actifs tant que tu tiens la touche. Pendant ce mode, la wing n'envoie rien à MA3.</div>
+    <div class="aide-mode" id="aideMode_apprentissage" style="display:none" data-i18n-html="ui.touches.aide.apprentissage"><b>Mode apprentissage</b> : tu appuies sur une touche de la wing, l'app la reconnaît et te propose de lui donner une commande MA3 (Store, Fixture…) ou un executor.</div>
     <!-- Les deux façons de configurer une touche, l'une sous l'autre et de
          même taille : ce sont deux chemins équivalents, pas une action
          principale et son option. -->
-    <div class="toolbar" style="margin:10px 0;justify-content:center">
-      <button class="btn big" id="btnAssistant" onclick="assistantBasculer()"
-              title="L'app annonce une touche, tu appuies dessus, elle passe à la suivante. Idéal pour configurer une wing de zéro." data-i18n="ui.touches.bouton.guidee" data-i18n-dynamic data-i18n-title="ui.touches.bouton.guidee_tip">
+    <div class="rangee-mode">
+      <button class="btn big" id="btnAssistant" onclick="assistantBasculer()" data-i18n="ui.touches.bouton.guidee" data-i18n-dynamic>
         🪄 Configuration guidée
       </button>
       <button class="btn-aide" onclick="basculerAideMode('guidee')" data-i18n-title="ui.touches.aide.tip" title="Explication rapide de ce mode" aria-label="?">?</button>
     </div>
-    <div class="aide-mode" id="aideMode_guidee" style="display:none" data-i18n-html="ui.touches.aide.guidee"><b>Configuration guidée</b> : l'app te demande une touche après l'autre, tu appuies dessus sur la wing et elle passe à la suivante. Tu peux passer une touche ou revenir en arrière. Idéal pour configurer une wing de zéro.</div>
+    <div class="aide-mode" id="aideMode_guidee" style="display:none" data-i18n-html="ui.touches.aide.guidee"><b>Configuration guidée</b> : l'app t'indique une touche à la fois. Appuie dessus sur la wing pour l'enregistrer, puis l'app passe à la suivante. Tu peux sauter une touche ou revenir à la précédente. Idéal pour configurer une wing de zéro.</div>
     <div class="toolbar" style="margin-bottom:10px;justify-content:center">
       <span class="muted" id="assistantEtat"></span>
     </div>
