@@ -1082,6 +1082,31 @@ def test_plugin_slot(wm3):
             else:
                 ok("slot hors bornes (0) : repli sur le défaut (1), réglage "
                    "corrigé en mémoire, aucune exception")
+
+        # 5. Import fait, sonde muette au 1er contrôle (« Plugin <n> » est une
+        #    bascule) : installer_plugin() doit relancer lui-même par NOM et
+        #    conclure OK dès que la sonde avance — sans renvoyer l'utilisateur
+        #    relancer à la main.
+        etat.E.SETTINGS["plugin_slot"] = 1
+        sauve_t = wm3._sonde_tours
+        appels = {"n": 0}
+
+        def _tours():            # muette tant qu'aucun « Plugin "WingLoader" » n'est parti
+            if any(a[1] == wm3._PLUGIN_RELANCE_CMD for a in envois if len(a) > 1):
+                appels["n"] += 1
+                return appels["n"]
+            return 5
+        wm3._sonde_tours = _tours
+        envois.clear()
+        try:
+            r = wm3.installer_plugin()
+        finally:
+            wm3._sonde_tours = sauve_t
+        if not r.get("ok"):
+            echec("installer_plugin() ne relance pas la sonde muette après l'import", repr(r))
+        else:
+            ok("installer_plugin() : sonde muette après import → relance par nom, "
+               "succès sans geste manuel")
     finally:
         (wm3.ma3_reachable, wm3._plugin_source_dir, wm3._ma3_base,
          etat.E.OSC, etat.E.SETTINGS["plugin_slot"], wm3.time.sleep) = sauve

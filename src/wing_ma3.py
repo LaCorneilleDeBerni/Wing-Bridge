@@ -563,6 +563,13 @@ def installer_plugin() -> dict:
         core.log("journal.ma3.sonde_ok")
         return {"ok": True, "message": _L("err.ma3.plugin_installe")}
 
+    # Import fait mais sonde muette : « Plugin <n> » est une bascule marche/arrêt
+    # et l'import peut avoir déjà démarré (ou pas) le plugin. On passe donc par
+    # la routine de relance (par NOM, jusqu'à 2 bascules) au lieu de demander
+    # à l'utilisateur de relancer à la main.
+    if relancer_plugin().get("ok"):
+        return {"ok": True, "message": _L("err.ma3.plugin_installe")}
+
     return {"ok": False, "raison": _L("err.ma3.sonde_muette_install", slot=slot)}
 
 
