@@ -21,6 +21,11 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- The “settings to make in grandMA3” help is rewritten for a new user, in the
+  order they are needed: an open session with the network on (Menu → Network),
+  then OSC, then the plugin, then the keyboard shortcuts. A short version opens
+  from the “?”, the full one is in the Help tab; the dated note about one
+  machine's case is gone.
 - Keys tab, “Keyboard shortcuts to MA3” card: trimmed down. No more key counts
   (they meant nothing from one wing or machine to another) and shorter status
   messages. The “?” windows of this tab (shortcuts, Accessibility, shortcut
