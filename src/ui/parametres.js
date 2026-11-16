@@ -447,13 +447,16 @@ function cartonsMiseEnRoute(s, plateforme, local) {
   // (s.mode === "bridge", comme majParametresGma3) ? La sauvegarde, elle, ne
   // se détecte pas : le bouton est proposé, jamais exigé.
   const demarre = s.mode === "bridge";
+  // Deux cartons distincts, une action chacun : d'abord enregistrer, ensuite
+  // démarrer. La sauvegarde n'est pas détectable : carton orange (conseillé),
+  // « Suivant » toujours possible.
+  const sauv = carton("sauvegarde", "orange", "ui.mr.sauvegarde.orange",
+    [{ id: "sauvegarder", cle: "ui.mr.sauvegarde.sauvegarder" }], true);
   const dem = demarre
-    ? carton("demarrage", "vert", "ui.mr.demarrage.vert",
-        [{ id: "sauvegarder", cle: "ui.mr.demarrage.sauvegarder" }], true)
+    ? carton("demarrage", "vert", "ui.mr.demarrage.vert", [], true)
     : carton("demarrage", "rouge", "ui.mr.demarrage.rouge",
-        [{ id: "sauvegarder", cle: "ui.mr.demarrage.sauvegarder" },
-         { id: "demarrer", cle: "ui.mr.demarrage.demarrer" }], false);
-  return [fw, osc, plugin, verif, rac, dem];
+        [{ id: "demarrer", cle: "ui.mr.demarrage.demarrer" }], false);
+  return [fw, osc, plugin, verif, rac, sauv, dem];
 }
 
 // « Suivant » : actif seulement si le carton est en place (vert), ou orange

@@ -821,7 +821,7 @@ process.stdout.write(JSON.stringify(R));
         echec("(6) cartonsMiseEnRoute a planté dans node", r.stderr[:300])
         return
     cas = json.loads(r.stdout)
-    attendu_ids = ["firmware", "osc", "plugin", "verification", "raccourcis", "demarrage"]
+    attendu_ids = ["firmware", "osc", "plugin", "verification", "raccourcis", "sauvegarde", "demarrage"]
     cles = set()
     for c in cas:
         etiq = {k: c[k] for k in ("fw", "win", "osc", "plug", "verif", "envoye", "acces", "bridge")}
@@ -829,7 +829,7 @@ process.stdout.write(JSON.stringify(R));
         if ids != attendu_ids:
             echec("(6a) une étape manque ou change d'ordre dans la liste", f"{etiq} → {ids}")
             return
-        fw, osc, plug, verif, rac, dem = c["cartons"]
+        fw, osc, plug, verif, rac, sauv, dem = c["cartons"]
         # (6g) Raccourcis : vert SEULEMENT si envoyés ET Accessibilité accordée
         # (ou Windows) ; Démarrage : vert SEULEMENT si le bridge tourne.
         rac_ok = c["envoye"] and c["acces"] in ("ok", "windows")
@@ -846,7 +846,7 @@ process.stdout.write(JSON.stringify(R));
             echec("(6g) carton Raccourcis : action d'envoi, note ShCuts ou « ? » manquants", f"{etiq} {rac}")
             return
         cles.add(rac["note"])
-        if [a["id"] for a in dem["actions"]] != (["sauvegarder"] if c["bridge"] else ["sauvegarder", "demarrer"]):
+        if [a["id"] for a in dem["actions"]] != ([] if c["bridge"] else ["demarrer"]):
             echec("(6g) carton Démarrage : actions Sauvegarder / Démarrer incohérentes", f"{etiq} {dem}")
             return
         for x, sv in zip(c["cartons"], c["suivants"]):
@@ -878,7 +878,7 @@ process.stdout.write(JSON.stringify(R));
             if x["pastille"] == "rouge" and not x["actions"] and x["id"] in ("firmware", "verification", "raccourcis", "demarrage"):
                 echec("(6a) carton rouge sans action pour le faire", f"{etiq} {x['id']}")
                 return
-            if x["pastille"] == "orange" and x["id"] != "verification":
+            if x["pastille"] == "orange" and x["id"] not in ("verification", "sauvegarde"):
                 echec("(6a) orange ailleurs qu'à la vérification", f"{etiq} {x['id']}")
                 return
         if (fw["pastille"] == "vert") != c["fw"] or (osc["pastille"] == "vert") != c["osc"] \
@@ -904,7 +904,7 @@ process.stdout.write(JSON.stringify(R));
     if manquantes:
         echec("(6d) clés de l'assistant de mise en route absentes en fr/en", ", ".join(manquantes))
         return
-    ok(f"(6a) cartonsMiseEnRoute ({len(cas)} combinaisons dans node) : 6 cartons toujours "
+    ok(f"(6a) cartonsMiseEnRoute ({len(cas)} combinaisons dans node) : 7 cartons toujours "
        "listés, pastille = détection, « Suivant » au vert (ou orange de la vérification) seulement")
     ok("(6b) carton Firmware : capture sous Windows, import .bin / .pcapng ailleurs")
     ok("(6g) cartons Raccourcis (envoi + Accessibilité) et Démarrage (bridge qui tourne) : "
