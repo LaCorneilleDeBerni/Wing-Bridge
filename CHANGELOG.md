@@ -7,6 +7,17 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.2] — 2026-11-16
+
+Build **#254** on both platforms. Windows verified on 2026-11-16 on a real PC
+with a wing and grandMA3 onPC: integrated firmware capture end to end in the
+new 7-card guided flow (identical firmware, USBPcap removed), refused-write
+warning, firmware indicator, cancel. macOS: same source, 83-control smoke test.
+Highlight: **the firmware capture assistant is now guided** — one card per
+step, you press “Next”, and nothing automatic starts before you do.
+
 ### Changed
 
 - **Firmware capture assistant is now semi-automatic: 7 cards confirmed by
