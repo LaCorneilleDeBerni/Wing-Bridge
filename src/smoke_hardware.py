@@ -632,11 +632,15 @@ def _exclusion_apprentissage_guide():
     # replié par défaut (demande de l'auteur, 16/11/2026).
     if 'data-i18n-html="ui.touches.intro"' in html:
         defauts.append("le pavé d'introduction de l'onglet Touches est revenu")
-    for mode in ("apprentissage", "guidee"):
-        if f"basculerAideMode('{mode}')" not in html:
-            defauts.append(f"le « ? » du mode {mode} a disparu")
-        if not re.search(r'id="aideMode_' + mode + r'" style="display:none"', html):
-            defauts.append(f"le résumé du mode {mode} n'est plus replié par défaut")
+    # Les deux « ? » réutilisent le système d'aide du projet (bouton
+    # `.aide` + fenêtre `aide()` + rubriques de ui/aides.js) : pas de panneau
+    # maison en double. test_aides_completes vérifie classement et textes.
+    for sujet in ("modeApprentissage", "modeGuide"):
+        if f"onclick=\"aide('{sujet}')\"" not in html:
+            defauts.append(f"le « ? » de la rubrique {sujet} a disparu du balisage")
+    if "btn-aide" in html or "aide-mode" in html or "basculerAideMode" in js:
+        defauts.append("un panneau d'aide maison (btn-aide / aide-mode / "
+                       "basculerAideMode) est revenu en double du système d'aide")
     # Pas d'infobulle de survol sur UN seul des deux boutons (constat de
     # l'auteur : « ça explique un mode mais pas l'autre ») : l'explication vit
     # dans le « ? ».
@@ -648,8 +652,6 @@ def _exclusion_apprentissage_guide():
     if html.count('class="rangee-mode"') < 2:
         defauts.append("les deux boutons de mode ne partagent plus le même gabarit "
                        "(rangee-mode) : tailles et alignement différeraient")
-    if "function basculerAideMode" not in js:
-        defauts.append("basculerAideMode a disparu de ui/touches.js")
     if 'id="btnAssistant" onclick="assistantBasculer()"' not in html:
         defauts.append("le bouton de l'assistant n'appelle plus assistantBasculer "
                        "(il ne serait plus son propre bouton d'arrêt)")

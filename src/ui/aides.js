@@ -33,7 +33,7 @@
 const AIDES_PAR_ONGLET = [
   ["ui.nav.bridge", ["demarrage", "suivreMa3", "faderPickup", "ledMa3",
                       "verbeCible", "usbArrache", "plugin"]],
-  ["ui.nav.touches", ["raccourcis", "accessibilite", "conflitRaccourci"]],
+  ["ui.nav.touches", ["modeApprentissage", "modeGuide", "raccourcis", "accessibilite", "conflitRaccourci"]],
   ["ui.nav.encodeurs", ["suivreEncMa3"]],
 ];
 

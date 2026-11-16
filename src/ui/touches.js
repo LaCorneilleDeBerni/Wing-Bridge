@@ -146,12 +146,6 @@ function showAssignForm(key) {
   document.getElementById("learnHint").textContent = t("ui.touches.hint.detectee");
 }
 
-// Petit « ? » à côté de chaque mode : déplie / replie son résumé rapide.
-function basculerAideMode(id) {
-  const el = document.getElementById("aideMode_" + id);
-  if (el) el.style.display = (el.style.display === "none") ? "" : "none";
-}
-
 async function toggleLearn() {
   if (assistant.actif) return;   // la configuration guidée a la main : on ne l'éteint pas d'ici
   const m = currentMode === "learn" ? "idle" : "learn";
