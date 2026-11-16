@@ -340,6 +340,7 @@ def test_firmware_capture():
     _controle_messages_capture(fwc)
     _controle_assistant_cartons(fwc, wing_handler)
     _controle_chantier_f(fwc)
+    _controle_mise_en_route()
 
 
 def _controle_assistant_cartons(fwc, wing_handler):
@@ -709,6 +710,141 @@ process.stdout.write(JSON.stringify(R));""")
     else:
         ok("(5e) « firmware non configuré » : renvoie vers « Capturer » si s.capture non null, "
            "vers l'import sinon (4 cas dans node, clés fr + en)")
+
+
+def _controle_mise_en_route():
+    """Chantier 3a (16/11/2026) : l'assistant de mise en route unique.
+
+    Promesses, chacune vue ROUGE par réinjection (rapport du chantier 3a) :
+      (a) cartonsMiseEnRoute, exécutée dans node sur firmware présent/absent ×
+          Windows/autre × OSC ok/ko × plugin ok/ko : les 4 cartons sont
+          TOUJOURS là (aucune étape sautée), dans l'ordre, la pastille est
+          cohérente avec la détection, « Suivant » n'est actif qu'au vert (ou à
+          l'orange de la vérification) ;
+      (b) le carton Firmware propose la capture sous Windows et l'import
+          (.bin / .pcapng) ailleurs, jamais l'inverse ;
+      (c) audit de source : l'assistant réutilise fwImportBin, fwImportCapture,
+          fwCaptureAmorcer, pluginInstaller, configGuideeDemarrer ; aucun
+          auto-skip (pas d'avance sans clic « Suivant ») ;
+      (d) toutes les clés du carton existent en fr ET en en.
+    """
+    import json
+    import re as _re
+    import subprocess
+    js = (HERE / "ui" / "parametres.js").read_text(encoding="utf-8")
+    fr = json.loads((HERE / "locales" / "fr.json").read_text(encoding="utf-8"))
+    en = json.loads((HERE / "locales" / "en.json").read_text(encoding="utf-8"))
+    noms = ("_oscConfigOk", "detectionsMiseEnRoute", "plateformeMiseEnRoute",
+            "cartonsMiseEnRoute", "mrSuivantActif")
+    morceaux = []
+    for nom in noms:
+        m = _re.search(r"^function " + nom + r"\(.*?^\}", js, _re.S | _re.M)
+        if not m:
+            echec(f"(6) {nom} introuvable dans ui/parametres.js")
+            return
+        morceaux.append(m.group(0))
+    node = None
+    for cand in ("node", "/opt/homebrew/bin/node", "/usr/local/bin/node"):
+        try:
+            subprocess.run([cand, "--version"], capture_output=True, timeout=5)
+            node = cand
+            break
+        except Exception:
+            continue
+    if not node:
+        note("(6) node introuvable — cartonsMiseEnRoute non exécutée")
+        return
+    script = "\n".join(morceaux) + """
+const ma3 = (ok) => ({actif: ok, entree: true, port_attendu: 8000,
+                      configs: [{port: 8000, recoit: true, rec_cmd: true}]});
+const R = [];
+for (const fw of [false, true]) for (const win of [false, true])
+for (const osc of [false, true]) for (const plug of [false, true])
+for (const verif of ["rouge", "passee", "faite"]) {
+  const s = {firmware: {configure: fw}, capture: win ? {actif: false} : null,
+             osc: {reachable: osc ? "ok" : "off", ma3: osc && plug ? ma3(true) : null},
+             sonde: {present: plug, actif: plug}};
+  const c = cartonsMiseEnRoute(s, plateformeMiseEnRoute(s),
+    {verifFaite: verif === "faite", verifPassee: verif === "passee"});
+  R.push({fw, win, osc, plug, verif, plateforme: plateformeMiseEnRoute(s),
+          cartons: c, suivants: c.map(mrSuivantActif)});
+}
+process.stdout.write(JSON.stringify(R));
+"""
+    r = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        echec("(6) cartonsMiseEnRoute a planté dans node", r.stderr[:300])
+        return
+    cas = json.loads(r.stdout)
+    attendu_ids = ["firmware", "osc", "plugin", "verification"]
+    cles = set()
+    for c in cas:
+        etiq = {k: c[k] for k in ("fw", "win", "osc", "plug", "verif")}
+        ids = [x["id"] for x in c["cartons"]]
+        if ids != attendu_ids:
+            echec("(6a) une étape manque ou change d'ordre dans la liste", f"{etiq} → {ids}")
+            return
+        fw, osc, plug, verif = c["cartons"]
+        for x, sv in zip(c["cartons"], c["suivants"]):
+            cles.add(x["texte"])
+            cles.update(a["cle"] for a in x["actions"])
+            if sv != (x["pastille"] in ("vert", "orange")):
+                echec("(6a) « Suivant » incohérent avec la pastille", f"{etiq} {x['id']}")
+                return
+            if x["pastille"] == "rouge" and not x["actions"] and x["id"] in ("firmware", "verification"):
+                echec("(6a) carton rouge sans action pour le faire", f"{etiq} {x['id']}")
+                return
+            if x["pastille"] == "orange" and x["id"] != "verification":
+                echec("(6a) orange ailleurs qu'à la vérification", f"{etiq} {x['id']}")
+                return
+        if (fw["pastille"] == "vert") != c["fw"] or (osc["pastille"] == "vert") != c["osc"] \
+                or (plug["pastille"] == "vert") != c["plug"]:
+            echec("(6a) pastille incohérente avec la détection", f"{etiq}")
+            return
+        if verif["pastille"] != {"rouge": "rouge", "passee": "orange", "faite": "vert"}[c["verif"]]:
+            echec("(6a) pastille de vérification incohérente", f"{etiq} → {verif['pastille']}")
+            return
+        acts = [a["id"] for a in fw["actions"]]
+        if c["plateforme"] != ("windows" if c["win"] else "autre"):
+            echec("(6b) plateforme mal déduite de s.capture", f"{etiq}")
+            return
+        if not c["fw"]:
+            attendu = ["capturer"] if c["win"] else ["import_bin", "import_capture"]
+            if acts != attendu:
+                echec("(6b) le carton Firmware propose la mauvaise action "
+                      "(capture sous Windows, import ailleurs)", f"{etiq} → {acts}")
+                return
+    manquantes = sorted(k for k in cles if k not in fr or k not in en)
+    manquantes += sorted(f"ui.mr.{i}.titre" for i in attendu_ids
+                         if f"ui.mr.{i}.titre" not in fr or f"ui.mr.{i}.titre" not in en)
+    if manquantes:
+        echec("(6d) clés de l'assistant de mise en route absentes en fr/en", ", ".join(manquantes))
+        return
+    ok(f"(6a) cartonsMiseEnRoute ({len(cas)} combinaisons dans node) : 4 cartons toujours "
+       "listés, pastille = détection, « Suivant » au vert (ou orange de la vérification) seulement")
+    ok("(6b) carton Firmware : capture sous Windows, import .bin / .pcapng ailleurs")
+    ok("(6d) toutes les clés de l'assistant existent en fr et en en")
+
+    # (c) audit de source : réemploi, aucun auto-skip
+    m_rendu = _re.search(r"^function assistantMiseEnRouteSuivant\(\) \{.*?^\}", js, _re.S | _re.M)
+    m_act = _re.search(r"^function _mrAction\(id\) \{.*?^\}", js, _re.S | _re.M)
+    if not m_rendu or not m_act:
+        echec("(6c) assistantMiseEnRouteSuivant / _mrAction introuvables")
+        return
+    manque = [f for f in ("fwImportBin(", "fwImportCapture(", "fwCaptureAmorcer(",
+                          "pluginInstaller(", "configGuideeDemarrer(", "fwExport(")
+              if f not in m_act.group(0)]
+    if manque:
+        echec("(6c) l'assistant ne réutilise pas les fonctions existantes", ", ".join(manque))
+    elif "mrSuivantActif(" not in m_rendu.group(0):
+        echec("(6c) « Suivant » de l'assistant n'est pas gardé par mrSuivantActif")
+    elif "disabled = !mrSuivantActif(" not in js:
+        echec("(6c) le bouton « Suivant » n'est pas piloté par mrSuivantActif")
+    elif _re.search(r"_mr\.i\+\+", js) and len(_re.findall(r"_mr\.i\+\+", js)) != 1:
+        echec("(6c) l'assistant avance à plusieurs endroits (auto-skip possible)")
+    else:
+        ok("(6c) assistant : réemploi de fwImportBin / fwImportCapture / fwCaptureAmorcer / "
+           "pluginInstaller / configGuideeDemarrer ; avance seulement par « Suivant » (gardé)")
 
 
 def _controle_messages_capture(fwc):

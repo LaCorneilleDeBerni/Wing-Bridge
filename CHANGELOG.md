@@ -7,6 +7,18 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Single setup assistant (first pass): a “Setup” button in Settings opens one
+  blurred window with cards, same layout as the firmware capture assistant.
+  It covers Firmware, OSC, Plugin and Check. Every step is always shown: green
+  when already in place, red with the action to do it otherwise. “Next” only
+  turns on when the card is green. On Windows the firmware card starts the
+  existing capture assistant; on Mac and Linux it offers the `.bin` and
+  `.pcapng` imports. The Check card starts the existing guided setup and can
+  be skipped (orange). After a successful capture the assistant opens instead
+  of the old where-will-you-use-it question. The old A-E steps stay for now.
+
 ### Changed
 
 - Keys tab, “Keyboard shortcuts to MA3” card: trimmed down. No more key counts

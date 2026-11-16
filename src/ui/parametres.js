@@ -17,11 +17,15 @@ async function saveLedMa3() {
 // Les sélecteurs de fichier sont NATIFS et ouverts côté serveur (voir
 // wing_handler._choisir_fichier) — d'où l'absence d'<input type=file> ici.
 function _fwMsg(txt, cls) {
-  const el = document.getElementById("fwMsg");
-  if (!el) return;
-  el.textContent = txt || "";
-  el.style.color = cls === "err" ? "var(--red)"
-                 : cls === "ok" ? "var(--green)" : "";
+  // Deux emplacements : la carte Firmware, et la ligne de retour de
+  // l'assistant de mise en route (#mrMsg) quand il est ouvert.
+  ["fwMsg", "mrMsg"].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = txt || "";
+    el.style.color = cls === "err" ? "var(--red)"
+                   : cls === "ok" ? "var(--green)" : "";
+  });
 }
 async function fwImportCapture() {
   _fwMsg(t("firmware.msg.selection_capture"));
@@ -201,6 +205,21 @@ function _fwAppliquerManuel(cap) {
   if (lien) lien.style.display = a.lienManuel ? "" : "none";
 }
 
+// Composants de cartons PARTAGÉS entre l'assistant de capture (ci-dessous) et
+// l'assistant de mise en route (assistantMiseEnRoute, plus bas) : mêmes
+// couleurs de pastille, même ligne « ● texte ». Une seule version.
+const CARTON_COULEUR_PASTILLE = { vert: "var(--green)", rouge: "var(--red)", orange: "var(--accent)" };
+function cartonLignePastille(etat, texte) {
+  const row = document.createElement("div");
+  const dot = document.createElement("span");
+  dot.textContent = "●";
+  dot.style.color = CARTON_COULEUR_PASTILLE[etat] || "var(--border)";
+  dot.style.marginRight = "6px";
+  row.appendChild(dot);
+  row.appendChild(document.createTextNode(texte || ""));
+  return row;
+}
+
 // Rend les 7 cartons : bordure/opacité selon l'état, pastilles et consigne
 // dans le carton EN COURS seulement, et DÉPLACE le bloc d'actions unique
 // (#fwCaptureActions : Suivant / Réessayer / Annuler) dans ce carton — un
@@ -208,7 +227,6 @@ function _fwAppliquerManuel(cap) {
 // chaque poll (bon marché : 7 <li>, quelques <div>).
 function _fwCaptureCartons(cap) {
   const total = cap.phase_total || 7;
-  const couleurPastille = { vert: "var(--green)", rouge: "var(--red)", orange: "var(--accent)" };
   const libelle = {
     fait: t("ui.param.fw.carton.fait"),
     en_cours: t("ui.param.fw.carton.en_cours"),
@@ -233,14 +251,7 @@ function _fwCaptureCartons(cap) {
       past.textContent = "";
       if (st === "en_cours") {
         (cap.pastilles || []).forEach(function (pst) {
-          const row = document.createElement("div");
-          const dot = document.createElement("span");
-          dot.textContent = "●";
-          dot.style.color = couleurPastille[pst.etat] || "var(--border)";
-          dot.style.marginRight = "6px";
-          row.appendChild(dot);
-          row.appendChild(document.createTextNode(pst.texte || ""));
-          past.appendChild(row);
+          past.appendChild(cartonLignePastille(pst.etat, pst.texte));
         });
       }
     }
@@ -298,6 +309,284 @@ async function fwCaptureSuivant() {
     _fwSuivantMsgFige = true;
   }
 }
+// ── Assistant de mise en route UNIQUE (chantier 3a, passage 1) ───────────────
+// Même gabarit que l'assistant de capture : fenêtre modale floue, cartons,
+// pastilles vert / rouge / orange, « Suivant » actif seulement quand le carton
+// courant est en place. Chaque étape s'affiche TOUJOURS : verte « déjà en
+// place » si c'est fait, rouge avec l'action pour la faire sinon — jamais
+// sautée en silence. Passage 1 : Firmware, OSC, Plugin, Vérification (les
+// Raccourcis et le démarrage restent dans l'ancien fil A-E, retiré au passage 2).
+//
+// Tout le calcul est dans des fonctions PURES (detectionsMiseEnRoute,
+// plateformeMiseEnRoute, cartonsMiseEnRoute, mrSuivantActif), exécutées telles
+// quelles dans node par le contrôle 49. Le reste ne fait que les afficher.
+
+// Détections partagées avec l'ancien fil A-E (majParametresGma3 les utilise
+// aussi : une seule définition de « OSC prêt », « sonde posée / active »).
+//  - oscPret   : OSC joignable (signal partiel) OU confirmé par la sonde ;
+//  - oscOkFull : la preuve complète (la sonde voit la bonne ligne OSC) ;
+//  - ma3La     : grandMA3 écoute (ok ou muet) ;
+//  - present   : fichiers du plugin posés ; active : la sonde répond.
+function detectionsMiseEnRoute(s) {
+  s = s || {};
+  const r = s.osc ? s.osc.reachable : null;
+  const oscReady = r === "ok";
+  const oscOkFull = _oscConfigOk(s.osc && s.osc.ma3) === true;
+  return {
+    oscReady: oscReady,
+    oscOkFull: oscOkFull,
+    oscPret: oscReady || oscOkFull,
+    ma3La: (r === "ok" || r === "muet"),
+    present: !!(s.sonde && s.sonde.present),
+    active: !!(s.sonde && s.sonde.actif),
+  };
+}
+
+// Windows x64 avec capture intégrée ⇔ s.capture n'est pas null (voir
+// wing_statut) ; sinon Mac / Linux, où le firmware s'apporte.
+function plateformeMiseEnRoute(s) {
+  return (s && s.capture != null) ? "windows" : "autre";
+}
+
+// Les cartons, dans l'ordre. `local` = ce que seul le navigateur sait :
+// { verifFaite, verifPassee }. Texte et libellés sont des CLÉS i18n.
+// Chaque carton : { id, pastille: vert|rouge|orange, texte, actions: [{id, cle}],
+// suivantPossible }. Aucun carton n'est jamais retiré de la liste.
+function cartonsMiseEnRoute(s, plateforme, local) {
+  s = s || {};
+  local = local || {};
+  const d = detectionsMiseEnRoute(s);
+  const fwOk = !!(s.firmware && s.firmware.configure);
+  const windows = plateforme === "windows";
+  const carton = function (id, pastille, texte, actions, suivantPossible) {
+    return { id: id, pastille: pastille, texte: texte, actions: actions || [],
+             suivantPossible: !!suivantPossible };
+  };
+
+  let fw;
+  if (fwOk) {
+    fw = carton("firmware", "vert", "ui.mr.fw.vert",
+      windows ? [{ id: "exporter", cle: "ui.mr.fw.exporter" }] : [], true);
+  } else if (windows) {
+    fw = carton("firmware", "rouge", "ui.mr.fw.rouge_windows",
+      [{ id: "capturer", cle: "ui.mr.fw.capturer" }], false);
+  } else {
+    fw = carton("firmware", "rouge", "ui.mr.fw.rouge_autre",
+      [{ id: "import_bin", cle: "ui.mr.fw.import_bin" },
+       { id: "import_capture", cle: "ui.mr.fw.import_capture" }], false);
+  }
+
+  const osc = d.oscPret
+    ? carton("osc", "vert", "ui.mr.osc.vert", [], true)
+    : carton("osc", "rouge", d.ma3La ? "ui.mr.osc.rouge" : "ui.mr.osc.rouge_sans_ma3",
+        [{ id: "aide_osc", cle: "ui.mr.osc.aide" }], false);
+
+  let plugin;
+  if (d.active) {
+    plugin = carton("plugin", "vert", "ui.mr.plugin.vert", [], true);
+  } else if (!d.oscPret) {
+    plugin = carton("plugin", "rouge", "ui.mr.plugin.rouge_sans_osc", [], false);
+  } else if (!d.ma3La) {
+    plugin = carton("plugin", "rouge", "ui.mr.plugin.rouge_sans_ma3", [], false);
+  } else if (!d.present) {
+    plugin = carton("plugin", "rouge", "ui.mr.plugin.rouge_absent",
+      [{ id: "installer_plugin", cle: "ui.mr.plugin.installer" }], false);
+  } else {
+    plugin = carton("plugin", "rouge", "ui.mr.plugin.rouge_arrete",
+      [{ id: "relancer_plugin", cle: "ui.mr.plugin.relancer" }], false);
+  }
+
+  // Vérification : rien ne la détecte, et l'auteur la veut facultative —
+  // « Passer » la met en orange et ne bloque jamais.
+  let verif;
+  if (local.verifFaite) {
+    verif = carton("verification", "vert", "ui.mr.verif.vert", [], true);
+  } else if (local.verifPassee) {
+    verif = carton("verification", "orange", "ui.mr.verif.orange",
+      [{ id: "config_guidee", cle: "ui.mr.verif.lancer" }], true);
+  } else {
+    verif = carton("verification", "rouge", "ui.mr.verif.rouge",
+      [{ id: "config_guidee", cle: "ui.mr.verif.lancer" },
+       { id: "passer", cle: "ui.mr.verif.passer" }], false);
+  }
+  return [fw, osc, plugin, verif];
+}
+
+// « Suivant » : actif seulement si le carton est en place (vert), ou orange
+// (vérification remise à plus tard). Jamais au rouge.
+function mrSuivantActif(carton) {
+  return !!(carton && carton.suivantPossible
+            && (carton.pastille === "vert" || carton.pastille === "orange"));
+}
+
+// ── Affichage (aucune décision ici : tout vient des fonctions pures) ────────
+let _mr = { ouvert: false, i: 0, signature: "" };
+let _mrStatut = null;                // dernier /api/status vu par le poll
+let _mrVerifPassee = false;          // « Passer cette étape » cliqué
+let _mrRouvrirApresGuide = false;    // la configuration guidée a été lancée d'ici
+
+function _mrCartons() {
+  return cartonsMiseEnRoute(_mrStatut, plateformeMiseEnRoute(_mrStatut),
+    { verifFaite: _etapeCPasseeManuel, verifPassee: _mrVerifPassee });
+}
+
+function assistantMiseEnRouteOuvrir(i) {
+  _mr.ouvert = true;
+  _mr.i = i || 0;
+  _mr.signature = "";
+  const fond = document.getElementById("mrFond");
+  const modal = document.getElementById("mrModal");
+  if (fond) fond.classList.add("ouvert");
+  if (modal) modal.classList.add("ouvert");
+  _mrMsgVider();
+  assistantMiseEnRouteRendre();
+}
+
+// Fermer ne fait rien d'irréversible : aucune action n'est lancée, l'état
+// (verte / rouge) se recalcule à la réouverture.
+function assistantMiseEnRouteFermer() {
+  _mr.ouvert = false;
+  const fond = document.getElementById("mrFond");
+  const modal = document.getElementById("mrModal");
+  if (fond) fond.classList.remove("ouvert");
+  if (modal) modal.classList.remove("ouvert");
+}
+
+function _mrMsgVider() {
+  const el = document.getElementById("mrMsg");
+  if (el) el.textContent = "";
+}
+
+// Appelée par poll() via majParametresGma3 : mémorise l'état et réaffiche si
+// l'assistant est ouvert et que quelque chose a changé.
+function majMiseEnRoute(s) {
+  _mrStatut = s;
+  if (_mr.ouvert) assistantMiseEnRouteRendre();
+}
+
+function assistantMiseEnRouteRendre() {
+  const liste = document.getElementById("mrCartons");
+  if (!liste || !_mrStatut) return;
+  const cartons = _mrCartons();
+  if (_mr.i >= cartons.length) _mr.i = cartons.length - 1;
+  const sig = JSON.stringify([cartons, _mr.i]);
+  if (sig === _mr.signature) return;      // rien de changé : on ne reconstruit pas
+  _mr.signature = sig;
+
+  const titre = document.getElementById("mrTitre");
+  if (titre) titre.textContent = t("ui.mr.etape", { n: _mr.i + 1, total: cartons.length });
+  const libelle = { fait: t("ui.param.fw.carton.fait"), en_cours: t("ui.param.fw.carton.en_cours"),
+                    a_venir: t("ui.param.fw.carton.a_venir") };
+  const bordure = { fait: "var(--green)", en_cours: "var(--accent)", a_venir: "var(--border)" };
+  liste.textContent = "";
+  cartons.forEach(function (c, idx) {
+    const st = idx < _mr.i ? "fait" : (idx === _mr.i ? "en_cours" : "a_venir");
+    const li = document.createElement("li");
+    li.style.cssText = "padding:8px 10px;border:1px solid " + bordure[st]
+      + ";border-radius:8px;background:var(--card2);opacity:" + (st === "a_venir" ? "0.5" : "1");
+    const tete = document.createElement("div");
+    tete.style.cssText = "display:flex;justify-content:space-between;gap:8px;align-items:baseline";
+    const b = document.createElement("b");
+    const num = document.createElement("span");
+    num.textContent = (idx + 1) + " · ";
+    const nom = document.createElement("span");
+    nom.textContent = t("ui.mr." + c.id + ".titre");
+    b.appendChild(num);
+    b.appendChild(nom);
+    const etat = document.createElement("span");
+    etat.className = "muted";
+    etat.style.cssText = "font-size:11.5px;white-space:nowrap";
+    etat.textContent = libelle[st];
+    if (st === "fait") etat.style.color = "var(--green)";
+    tete.appendChild(b);
+    tete.appendChild(etat);
+    li.appendChild(tete);
+    // Les cartons déjà passés gardent leur pastille : on voit ce qui est vert.
+    if (st !== "a_venir") {
+      const past = document.createElement("div");
+      past.style.cssText = "margin-top:4px;line-height:1.7";
+      past.appendChild(cartonLignePastille(c.pastille, t(c.texte)));
+      li.appendChild(past);
+    }
+    if (st === "en_cours") {
+      if (c.id === "firmware" && c.pastille === "rouge" && c.actions[0] && c.actions[0].id === "import_bin") {
+        const note = document.createElement("div");
+        note.className = "muted";
+        note.style.cssText = "margin-top:4px;font-size:12.5px";
+        note.textContent = t("ui.mr.fw.note_autre");
+        li.appendChild(note);
+      }
+      if (c.actions.length) {
+        const bar = document.createElement("div");
+        bar.className = "toolbar";
+        bar.style.marginTop = "8px";
+        c.actions.forEach(function (a) {
+          const btn = document.createElement("button");
+          btn.className = "btn";
+          btn.textContent = t(a.cle);
+          btn.onclick = function () { _mrAction(a.id); };
+          bar.appendChild(btn);
+        });
+        li.appendChild(bar);
+      }
+    }
+    liste.appendChild(li);
+  });
+
+  const cour = cartons[_mr.i];
+  const suiv = document.getElementById("mrSuivantBtn");
+  if (suiv) {
+    suiv.disabled = !mrSuivantActif(cour);
+    suiv.textContent = _mr.i === cartons.length - 1 ? t("ui.mr.terminer") : t("ui.mr.suivant");
+  }
+  const prec = document.getElementById("mrPrecedentBtn");
+  if (prec) prec.style.display = _mr.i > 0 ? "" : "none";
+}
+
+function assistantMiseEnRouteSuivant() {
+  const cartons = _mrCartons();
+  if (!mrSuivantActif(cartons[_mr.i])) return;   // garde-fou : jamais au rouge
+  _mrMsgVider();
+  if (_mr.i >= cartons.length - 1) { assistantMiseEnRouteFermer(); return; }
+  _mr.i++;
+  _mr.signature = "";
+  assistantMiseEnRouteRendre();
+}
+
+function assistantMiseEnRoutePrecedent() {
+  if (_mr.i > 0) _mr.i--;
+  _mr.signature = "";
+  _mrMsgVider();
+  assistantMiseEnRouteRendre();
+}
+
+// Les actions REPRENNENT les fonctions existantes, rien n'est réécrit ici.
+function _mrAction(id) {
+  if (id === "capturer") {
+    // L'assistant de capture a sa propre fenêtre modale : on referme celle-ci,
+    // majCapture() rouvre l'assistant à la fin d'une capture réussie.
+    assistantMiseEnRouteFermer();
+    fwCaptureAmorcer();
+    allerOnglet("parametres");
+    const bloc = document.getElementById("fwCaptureConfirm");
+    if (bloc) bloc.scrollIntoView({ behavior: "smooth", block: "center" });
+  } else if (id === "import_bin") fwImportBin();
+  else if (id === "import_capture") fwImportCapture();
+  else if (id === "exporter") fwExport();
+  else if (id === "aide_osc") aide("demarrage");
+  else if (id === "installer_plugin") pluginInstaller("mrMsg");
+  else if (id === "relancer_plugin") _relancerPlugin("mrMsg", null);
+  else if (id === "config_guidee") {
+    assistantMiseEnRouteFermer();
+    _mrRouvrirApresGuide = true;
+    configGuideeDemarrer();
+  } else if (id === "passer") {
+    _mrVerifPassee = true;
+    _mr.signature = "";
+    assistantMiseEnRouteRendre();
+  }
+}
+
 // Pastilles A–E de la phase de mise en route (post-firmware) — voir le
 // commentaire du balisage (#mercWizStepbar) pour pourquoi des LETTRES et pas
 // des chiffres. `states` : {A:'done'|'current'|'pending'|'warn', B:…, …}.
@@ -373,20 +662,13 @@ function majCapture(cap) {
       // confirmée. Fichier : … » à ce stade — on le garde tel quel.
       const base = (cap.etape || t("firmware.msg.configure")) + (cap.note || "");
       _fwCaptureResultat(base, cap.note ? "warn" : "ok");
-      // Aiguillage « où sera utilisé Wing Bridge ? » — il PRÉCÈDE l'invitation
-      // « vérifie ta wing » (#fwCaptureSuite). Branche « ici » → ferme juste
-      // l'aiguillage, le fil standard A→E prend le relais (fwAiguillage()) ;
-      // branche « Mac » → exporter le .bin (fwAiguillageFini() révèle la suite).
+      // L'assistant de mise en route remplace l'aiguillage « où sera utilisé
+      // Wing Bridge ? » (chantier 3a) : il s'ouvre ici, firmware en vert. Son
+      // action « Exporter le firmware » reprend la branche « autre ordinateur ».
+      // L'aiguillage reste dans le balisage, masqué, pour l'ancien fil A-E.
       const aig = document.getElementById("fwCaptureAiguillage");
-      if (aig) {
-        aig.style.display = "";
-        const mac = document.getElementById("fwAiguillageMac");
-        if (mac) mac.style.display = "none";
-      } else {
-        // Repli : pas d'aiguillage dans le balisage → invitation directe.
-        const suite = document.getElementById("fwCaptureSuite");
-        if (suite) suite.style.display = "";
-      }
+      if (aig) aig.style.display = "none";
+      assistantMiseEnRouteOuvrir();
     } else if (cap.annule) {
       // Annulation demandée par l'utilisateur : message NEUTRE, pas la
       // bannière rouge, et PAS d'aiguillage. Un résidu USBPcap est repris tel
@@ -612,6 +894,7 @@ function configGuideeSuivant() {
 
 function configGuideeQuitter() {
   _guideEtat = 0;
+  _mrRouvrirApresGuide = false;
   const banniere = document.getElementById("guideBanniere");
   if (banniere) banniere.style.display = "none";
 }
@@ -622,9 +905,11 @@ function configGuideeQuitter() {
 // C demande — sans ce drapeau, revenir sur Paramètres réafficherait C après
 // l'avoir déjà faite via la bannière.
 function configGuideeTerminer() {
+  const reprendre = _mrRouvrirApresGuide;   // lancée depuis l'assistant de mise en route
   configGuideeQuitter();
   etapeCSuivante();
   retourParametresRaccourcis();
+  if (reprendre) assistantMiseEnRouteOuvrir(3);
 }
 
 // Étape E du wizard : bouton « 💾 Sauvegarder la configuration », juste avant
@@ -951,6 +1236,7 @@ async function savePluginSlot(valeur, msgElId) {
 
 function majParametresGma3(s) {
   if (!s) return;
+  majMiseEnRoute(s);   // assistant de mise en route (chantier 3a)
   if (!_pluginSlotFieldsBusy()) _majPluginSlotUI(s.plugin_slot);
   // Bridge RÉELLEMENT démarré (pas juste « l'utilisateur a cliqué une fois ») :
   // remplace tout le fil post-firmware par un résumé (voir #miseEnRouteTerminee
@@ -1051,9 +1337,9 @@ function majParametresGma3(s) {
   // oscReady bloquait A→B indéfiniment malgré une preuve plus forte
   // disponible. D'où le OU : dès que l'UN des deux signaux est bon, B prend
   // le relais — jamais A et B en même temps.
-  const oscReady = r === "ok";
-  const oscOkFull = _oscConfigOk(s.osc && s.osc.ma3) === true;
-  const oscPret = oscReady || oscOkFull;
+  const det3 = detectionsMiseEnRoute(s);
+  const oscOkFull = det3.oscOkFull;
+  const oscPret = det3.oscPret;
   // 🐛 Vécu en test réel Windows (19/09/2026) : l'étape A apparaissait DÈS
   // que le firmware était sauvegardé sur disque (wing_init.enregistrer_firmware,
   // capturer_firmware() l'appelle en tout début de ses phases 5-7 : fermer
@@ -1191,9 +1477,9 @@ function _pluginStatutLigne(txtElId, btnElId, s, active) {
 // Bouton « 🧩 Installer automatiquement » (carte Firmware). Copie + import OSC
 // + vérif sonde côté serveur (~3,5 s). Échec → message actionnable + on
 // déplie la procédure manuelle de la carte grandMA3.
-async function pluginInstaller() {
+async function pluginInstaller(msgElId) {
   const btn = document.getElementById("pluginInstallBtn");
-  const msg = document.getElementById("pluginEtapeMsg");
+  const msg = document.getElementById(msgElId || "pluginEtapeMsg");
   if (btn) btn.disabled = true;
   if (msg) { msg.textContent = t("ui.param.plugin.install_en_cours"); msg.style.color = ""; }
   let r;

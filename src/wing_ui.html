@@ -255,7 +255,10 @@ button.btn.primary:disabled, button.btn.green:disabled { border: none; }
 .fwFond { position: fixed; inset: 0; z-index: 800; display: none;
   background: rgba(8,10,13,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .fwFond.ouvert { display: block; }
-#fwCaptureProgress.fwModal { position: fixed; z-index: 801; top: 50%; left: 50%;
+#voileAide { z-index: 900; }   /* l'aide s'ouvre AU-DESSUS de l'assistant de mise en route */
+#mrModal { display: none; }
+#mrModal.ouvert { display: block; }
+#fwCaptureProgress.fwModal, #mrModal.ouvert { position: fixed; z-index: 801; top: 50%; left: 50%;
   transform: translate(-50%, -50%); width: min(760px, 94vw); max-height: 92vh;
   overflow-y: auto; margin: 0; padding: 18px; background: var(--card);
   border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
@@ -1128,6 +1131,22 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
            majCapture() → _fwCaptureCartons() depuis /api/status (s.capture :
            phase, pastilles, etape, suivant_possible, suivant_cle). -->
       <div id="fwCaptureFond" class="fwFond"></div>
+      <!-- Assistant de mise en route UNIQUE (chantier 3a) : même fond flou et
+           même gabarit de cartons que la capture. Cartons rendus par
+           assistantMiseEnRouteRendre() (ui/parametres.js) depuis la fonction
+           pure cartonsMiseEnRoute ; rien n'est sauté, rien n'est décidé ici. -->
+      <div id="mrFond" class="fwFond"></div>
+      <div id="mrModal" style="font-size:13px">
+        <div id="mrTitre" style="font-size:16px;font-weight:700;margin-bottom:10px" data-i18n="ui.mr.etape" data-i18n-dynamic>Mise en route, étape {n} sur {total}</div>
+        <ol id="mrCartons" style="list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px"></ol>
+        <div class="toolbar" style="margin-top:10px">
+          <button class="btn" id="mrPrecedentBtn" onclick="assistantMiseEnRoutePrecedent()" style="display:none" data-i18n="ui.mr.precedent">Précédent</button>
+          <button class="btn primary" id="mrSuivantBtn" onclick="assistantMiseEnRouteSuivant()" disabled data-i18n="ui.mr.suivant" data-i18n-dynamic>Suivant</button>
+          <button class="btn" onclick="assistantMiseEnRouteFermer()" data-i18n="ui.mr.fermer">Fermer</button>
+        </div>
+        <div class="muted" style="margin-top:6px;font-size:12px" data-i18n="ui.mr.aide_suivant">Suivant s'active quand l'étape est en place.</div>
+        <div id="mrMsg" style="margin-top:6px;font-size:12.5px"></div>
+      </div>
       <div id="fwCaptureProgress" style="display:none;font-size:13px;margin-top:8px">
         <!-- Titre du modal « Étape N/7 » : écrit par majCapture() (data-i18n-dynamic),
              vide hors modal. -->
@@ -1315,6 +1334,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       <button class="btn fwManuel" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
       <button class="btn fwManuel" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
       <a href="#" id="fwManuelLien" class="muted" style="display:none;font-size:12px" onclick="fwManuelBasculer(); return false;" data-i18n="ui.param.fw.manuel_lien">Repli manuel</a>
+      <button class="btn primary" onclick="assistantMiseEnRouteOuvrir()" data-i18n="ui.mr.ouvrir">Mise en route</button>
       <button class="btn" id="fwExportBtn" onclick="fwExport()" style="display:none" data-i18n="ui.param.fw.export_btn">💾 Exporter le firmware</button>
       <span class="muted" id="fwMsg" style="font-size:12.5px"></span>
     </div>
