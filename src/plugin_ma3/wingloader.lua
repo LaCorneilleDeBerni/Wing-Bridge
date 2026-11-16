@@ -19,9 +19,9 @@
 --  doit changer un jour, il faudra la re-importer une fois.
 --
 --  INSTALLATION (une seule fois)
---    Edit Plugin 3  -> Import -> wingloader
---    Set Plugin 3.1 Property "Installed" "Yes"
---    Plugin 3       -> lance la sonde (bascule marche/arret)
+--    Edit Plugin 1  -> Import -> wingloader
+--    Set Plugin 1.1 Property "Installed" "Yes"
+--    Plugin 1       -> lance la sonde (bascule marche/arret)
 --    Puis ENREGISTRER LE SHOW.
 -- ===========================================================================
 

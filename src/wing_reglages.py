@@ -230,14 +230,14 @@ def load_settings():
             # PRATIQUE, pas documentée par le manuel MA3 comme un plafond du
             # pool Plugins : rien trouvé dans keyword_plugin.html/plugins.html
             # à ce sujet, donc pas de chiffre MA3 présenté comme un fait). Une
-            # valeur hors bornes ou illisible retombe sur le défaut (3) plutôt
+            # valeur hors bornes ou illisible retombe sur le défaut (1) plutôt
             # que de faire échouer tout le chargement des réglages.
             if "plugin_slot" in d:
                 try:
                     slot = int(d["plugin_slot"])
-                    core.reglage_poser(plugin_slot=slot if 1 <= slot <= 9999 else 3)
+                    core.reglage_poser(plugin_slot=slot if 1 <= slot <= 9999 else 1)
                 except (TypeError, ValueError):
-                    core.reglage_poser(plugin_slot=3)
+                    core.reglage_poser(plugin_slot=1)
             # ⭐ Profil favori — réglage MACHINE et non de profil : il DÉSIGNE
             # un profil, il ne peut donc pas vivre dedans (un profil qui se
             # déclare favori se propagerait à chaque copie).

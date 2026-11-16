@@ -240,7 +240,7 @@ elle liste les points à vérifier au lieu de désigner un coupable. Si l'app di
 (l'exécuter deux fois — la 1ʳᵉ le stoppe s'il tournait, la 2ᵉ le relance).
 
 > ⚠️ **Ne pas coller un numéro de slot dans les messages utilisateur.**
-> L'installation Wing Bridge pose l'amorce en `Plugin 3`, mais un plugin déjà
+> L'installation Wing Bridge pose l'amorce en `Plugin 1` par défaut, mais un plugin déjà
 > présent chez l'utilisateur peut être ailleurs. Le bouton « Relancer le
 > plugin » de l'app vise donc le **nom** (`Plugin "WingLoader"`, syntaxe
 > `Plugin ["Nom" or Numéro]` du manuel 2.5), pas le numéro ; les textes
@@ -313,7 +313,7 @@ rien malgré les fichiers, le message de `relancer_plugin()` (« … réinstalle
 plugin ») prend le relais.
 
 ⚠️ **Aucun numéro de slot dans les messages utilisateur.** L'install Wing Bridge
-pose l'amorce en `Plugin 3`, mais l'emplacement d'un plugin déjà présent varie.
+pose l'amorce en `Plugin 1` par défaut, mais l'emplacement d'un plugin déjà présent varie.
 `relancer_plugin()` exécute donc l'amorce **par son nom** —
 `/cmd 'Plugin "WingLoader"'` (syntaxe `Plugin ["Nom" or Numéro]`,
 `keyword_plugin.html` 2.5) — et les textes disent « relance le plugin », sans
@@ -633,15 +633,17 @@ Découvert en cherchant à installer le plugin à distance :
 manipulation souris n'est nécessaire.
 
 ```
-Import Plugin Library "wingloader.xml" At 3
-Set Plugin 3.1 Property "Installed" "Yes"
-Plugin 3
+Import Plugin Library "wingloader.xml" At 1
+Set Plugin 1.1 Property "Installed" "Yes"
+Plugin 1
 ```
 
-Syntaxe validée du premier coup. `3` est l'emplacement (slot) du pool
+Syntaxe validée du premier coup. `1` est l'emplacement (slot) du pool
 Plugins de MA3 — **configurable**, `SETTINGS["plugin_slot"]` (Paramètres →
 🎛️ grandMA3, ou l'aiguillage de fin d'assistant firmware sous Windows), défaut
-3 = comportement d'avant ce réglage. `wing_ma3._plugin_osc(slot)` génère cette
+1 (changé de 3 à 1 en v1.0.3 ; l'assistant de mise en route propose aussi le
+champ, avec l'avertissement Overwrite / Merge / Cancel et la rubrique d'aide
+`pluginSlot`). `wing_ma3._plugin_osc(slot)` génère cette
 séquence pour le slot réglé. Nécessaire parce qu'OSC est à **sens unique** :
 l'app ne peut pas lire quels slots sont déjà occupés avant d'importer, donc
 pas de détection fiable d'une collision — un slot déjà pris ouvre dans MA3 un

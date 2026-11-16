@@ -939,7 +939,7 @@ def test_plugin_install(wm3):
 def test_plugin_slot(wm3):
     """Emplacement (slot) du plugin, configurable — SETTINGS["plugin_slot"].
 
-    🔑 Le slot était en dur à 3 (`_PLUGIN_OSC`). Devenu un réglage parce
+    🔑 Le slot était en dur (`_PLUGIN_OSC`). Devenu un réglage parce
     qu'OSC est à sens unique : l'app ne peut pas lire quels slots de MA3 sont
     déjà occupés avant d'importer, donc pas de détection fiable d'une
     collision — un slot déjà pris ouvre un dialogue Overwrite/Merge/Cancel qui
@@ -948,10 +948,12 @@ def test_plugin_slot(wm3):
          besoin (Import/Set/Plugin), pas dans SaveShow ;
       2. `/api/plugin_slot` est routé vers `Handler._post_plugin_slot` ;
       3. `installer_plugin()` lit `SETTINGS["plugin_slot"]` et l'utilise tel
-         quel dans la séquence OSC envoyée (pas figé à 3) ;
+         quel dans la séquence OSC envoyée (pas figé) ;
       4. un slot HORS BORNES ne fait pas planter l'installation : repli sur
-         le défaut (3), `SETTINGS["plugin_slot"]` corrigé en mémoire, aucune
-         exception.
+         le défaut (1), `SETTINGS["plugin_slot"]` corrigé en mémoire, aucune
+         exception ;
+      5. le défaut est 1 PARTOUT (constante, état initial, replis du handler
+         et du chargement des réglages) : aucun « 3 » de défaut ne subsiste.
     """
     section("54. Emplacement configurable du plugin grandMA3")
     import wing_handler
@@ -971,15 +973,42 @@ def test_plugin_slot(wm3):
         echec("_plugin_osc(7) contient encore un « 3 » — le slot n'a pas "
               "remplacé le défaut en dur", repr(seq7))
         return
-    seq3 = wm3._plugin_osc(3)
-    if seq3 != ('Import Plugin Library "wingloader.xml" At 3',
-                'Set Plugin 3.1 Property "Installed" "Yes"',
-                'Plugin 3',
+    if (wm3.PLUGIN_SLOT_MIN, wm3.PLUGIN_SLOT_MAX, wm3.PLUGIN_SLOT_DEFAUT) != (1, 9999, 1):
+        echec("bornes / défaut du slot : attendu (1, 9999, 1)",
+              repr((wm3.PLUGIN_SLOT_MIN, wm3.PLUGIN_SLOT_MAX, wm3.PLUGIN_SLOT_DEFAUT)))
+        return
+    seq1 = wm3._plugin_osc(wm3.PLUGIN_SLOT_DEFAUT)
+    if seq1 != ('Import Plugin Library "wingloader.xml" At 1',
+                'Set Plugin 1.1 Property "Installed" "Yes"',
+                'Plugin 1',
                 'SaveShow'):
-        echec("_plugin_osc(3) — le défaut — a changé de forme", repr(seq3))
+        echec("_plugin_osc(défaut) a changé de forme", repr(seq1))
         return
     ok("_plugin_osc(7) → At 7 / Plugin 7.1 / Plugin 7 (SaveShow inchangé) ; "
-       "_plugin_osc(3) toujours identique à l'ancien _PLUGIN_OSC")
+       "_plugin_osc(défaut) → slot 1, bornes 1..9999")
+    # 5. Aucun « 3 » de défaut ne subsiste dans les sources qui portent le défaut.
+    import re as _re5
+    _d = Path(__file__).resolve().parent
+    _audit = {
+        "etat.py": r'"plugin_slot"\s*:\s*3\b',
+        "wing_reglages.py": r'plugin_slot\s*=\s*3\b|else 3\)|défaut \(3\)',
+        "wing_handler.py": r'défaut \(3\)|plugin_slot\s*=\s*3\b',
+        "wing_ma3.py": r'PLUGIN_SLOT_DEFAUT\s*=\s*[^\n]*,\s*3\b',
+        "wing_ui.html": r'placeholder="3"|défaut 3\b|3 par défaut|At 3\b|Plugin 3\b',
+        "locales/fr.json": r'3 par défaut|At 3\b|Plugin 3\b',
+        "locales/en.json": r'3 by default|At 3\b|Plugin 3\b',
+        "plugin_ma3/installer.sh": r'At 3\b|Plugin 3\b',
+        "plugin_ma3/wingbridge.lua": r'At 3\b|Plugin 3\b',
+        "plugin_ma3/wingloader.lua": r'At 3\b|Plugin 3\b',
+        "ui/parametres.js": r'At 3\b|Plugin 3\b|slot 3\b',
+    }
+    restes = [f"{f} : {m.group(0)!r}" for f, motif in _audit.items()
+              for m in _re5.finditer(motif, (_d / f).read_text(encoding="utf-8"))]
+    if restes:
+        echec("un « 3 » de défaut du slot subsiste", " ; ".join(restes[:6]))
+        return
+    ok("aucun « 3 » de défaut du slot ne subsiste (constante, état, replis, "
+       "balisage, catalogues, plugin)")
 
     # ── 2. Routage /api/plugin_slot ───────────────────────────────────────────
     routes = dict(wing_handler.Handler.ROUTES_POST)
@@ -1027,13 +1056,13 @@ def test_plugin_slot(wm3):
         envois.clear()
         wm3.installer_plugin()
         cmds = [a[1] for a in envois if len(a) > 1]
-        if not any("At 7" in c for c in cmds) or any("At 3" in c for c in cmds):
+        if not any("At 7" in c for c in cmds) or any("At 1" in c for c in cmds):
             echec("installer_plugin() n'utilise pas SETTINGS[\"plugin_slot\"]",
                   f"commandes envoyées : {cmds!r}")
         else:
             ok("installer_plugin() envoie bien la séquence OSC du slot réglé (7)")
 
-        # 4. Slot hors bornes (0) : repli sur le défaut (3), pas d'exception,
+        # 4. Slot hors bornes (0) : repli sur le défaut (1), pas d'exception,
         #    SETTINGS corrigé en mémoire pour que l'UI reflète ce qui a été
         #    réellement tenté (pas la valeur invalide laissée affichée).
         etat.E.SETTINGS["plugin_slot"] = 0
@@ -1044,14 +1073,14 @@ def test_plugin_slot(wm3):
             echec("installer_plugin() plante sur un slot hors bornes", repr(e))
         else:
             cmds = [a[1] for a in envois if len(a) > 1]
-            if not any("At 3" in c for c in cmds):
-                echec("slot hors bornes (0) : pas de repli sur le défaut (3)",
+            if not any("At 1" in c for c in cmds):
+                echec("slot hors bornes (0) : pas de repli sur le défaut (1)",
                       f"commandes envoyées : {cmds!r}")
-            elif etat.E.SETTINGS.get("plugin_slot") != 3:
+            elif etat.E.SETTINGS.get("plugin_slot") != 1:
                 echec("slot hors bornes : SETTINGS[\"plugin_slot\"] pas corrigé "
                       "en mémoire", repr(etat.E.SETTINGS.get("plugin_slot")))
             else:
-                ok("slot hors bornes (0) : repli sur le défaut (3), réglage "
+                ok("slot hors bornes (0) : repli sur le défaut (1), réglage "
                    "corrigé en mémoire, aucune exception")
     finally:
         (wm3.ma3_reachable, wm3._plugin_source_dir, wm3._ma3_base,

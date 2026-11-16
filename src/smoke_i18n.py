@@ -492,7 +492,7 @@ _ALLOWLIST_J = {
     # (shcuts_etat()). Vérifié par grep : sonde_via n'est lu que par le
     # smoke test (smoke_raccourcis.py), jamais par ui/*.js.
     ("wing_raccourcis.py",
-     '"(plugin MA3 à relancer : Plugin 3 deux fois)"'):
+     '"(plugin MA3 à relancer : deux fois de suite)"'):
         "base[\"sonde_via\"] : jamais lu côté client (grep ui/*.js), "
         "seulement par le smoke test.",
     ("wing_raccourcis.py",

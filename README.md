@@ -202,21 +202,21 @@ the import + `SaveShow`, and checks that the probe answers. On failure, it falls
 back to the manual procedure.
 
 **By hand** (`src/plugin_ma3/installer.sh` on macOS copies the files into MA3's
-plugin pool), then in MA3's command line (`3` is the plugin's **location**
-in MA3's Plugins pool — **configurable**, Settings → 🎛️ grandMA3, default `3`;
+plugin pool), then in MA3's command line (`1` is the plugin's **location**
+in MA3's Plugins pool — **configurable**, Settings → 🎛️ grandMA3, default `1`;
 change it if that slot is already taken by another plugin on your machine):
 
 ```
-Import Plugin Library "wingloader.xml" At 3
-Set Plugin 3.1 Property "Installed" "Yes"
-Plugin 3
+Import Plugin Library "wingloader.xml" At 1
+Set Plugin 1.1 Property "Installed" "Yes"
+Plugin 1
 ```
 
 …and **save the show**. These commands also work over OSC. The full procedure
 (Windows included) is in **Settings → 🎛️ grandMA3** and in the **Help → Install
 the MA3 plugin** tab.
 
-> 🔁 **`Plugin 3` must be re-typed in MA3 after EVERY launch of grandMA3.**
+> 🔁 **`Plugin 1` must be re-typed in MA3 after EVERY launch of grandMA3.**
 > The probe does not survive an MA3 restart, and MA3 has no automatic plugin
 > startup. Until it's done, the “MA3 probe” indicator on the Bridge tab flags
 > it.

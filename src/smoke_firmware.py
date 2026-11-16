@@ -821,6 +821,26 @@ process.stdout.write(JSON.stringify(R));
         for x, sv in zip(c["cartons"], c["suivants"]):
             cles.add(x["texte"])
             cles.update(a["cle"] for a in x["actions"])
+            # (6f) Carton Plugin : le champ de l'emplacement + l'avertissement
+            # Overwrite / Merge / Cancel accompagnent « Installer le plugin »,
+            # et lui seul (jamais sur « Relancer », jamais au vert).
+            if x["id"] == "plugin":
+                installe = any(a["id"] == "installer_plugin" for a in x["actions"])
+                if installe != (x.get("champ") == "plugin_slot"):
+                    echec("(6f) carton Plugin : champ d'emplacement absent avec "
+                          "« Installer le plugin » (ou présent sans lui)", f"{etiq} {x}")
+                    return
+                if installe:
+                    cles.add(x.get("note", ""))
+                    avert = fr.get(x.get("note"), "") + en.get(x.get("note"), "")
+                    if not all(m in fr.get(x.get("note"), "") and m in en.get(x.get("note"), "")
+                               for m in ("Overwrite", "Merge", "Cancel")):
+                        echec("(6f) l'avertissement du carton Plugin ne cite pas "
+                              "Overwrite, Merge et Cancel (fr + en)", avert[:200])
+                        return
+                    if x.get("aide") != "pluginSlot":
+                        echec("(6f) carton Plugin : pas de « ? » vers la rubrique pluginSlot", f"{x}")
+                        return
             if sv != (x["pastille"] in ("vert", "orange")):
                 echec("(6a) « Suivant » incohérent avec la pastille", f"{etiq} {x['id']}")
                 return
@@ -858,14 +878,53 @@ process.stdout.write(JSON.stringify(R));
     ok("(6b) carton Firmware : capture sous Windows, import .bin / .pcapng ailleurs")
     ok("(6d) toutes les clés de l'assistant existent en fr et en en")
 
+    # (f) audit de source du champ d'emplacement dans le carton Plugin : rendu
+    # AVANT la barre de boutons, réutilise savePluginSlot (donc /api/plugin_slot,
+    # validation et repli serveur), « ? » ouvrant la rubrique, libellé et
+    # avertissement lus au catalogue ; la rubrique d'aide existe fr + en.
+    i_champ = js.find('c.champ === "plugin_slot"')
+    i_barre = js.find("if (c.actions.length) {", i_champ)
+    corps_champ = js[i_champ:i_barre] if i_champ >= 0 and i_barre > i_champ else ""
+    pb = []
+    if not corps_champ:
+        pb.append("le rendu du champ d'emplacement est absent, ou après la barre de boutons")
+    else:
+        for motif in ('id = "mrSlotInput"', 'savePluginSlot(champ.value, "mrMsg")',
+                      "aide(c.aide)", 'className = "aide"', "ui.mr.plugin.slot_label",
+                      "t(c.note)"):
+            if motif not in corps_champ:
+                pb.append(f"{motif!r} manque dans le champ d'emplacement")
+    if '"/api/plugin_slot"' not in js:
+        pb.append("/api/plugin_slot n'est plus appelé par ui/parametres.js")
+    if 'ui.mr.plugin.slot_label' not in fr or 'ui.mr.plugin.slot_label' not in en:
+        pb.append("ui.mr.plugin.slot_label absent de fr/en")
+    for sujet_cle in ("aide.pluginSlot.titre", "aide.pluginSlot.court", "aide.pluginSlot.html"):
+        if sujet_cle not in fr or sujet_cle not in en:
+            pb.append(f"{sujet_cle} absent de fr/en")
+    if '"ui.nav.parametres", ["pluginSlot"]' not in (HERE / "ui" / "aides.js").read_text(encoding="utf-8"):
+        pb.append("pluginSlot n'est pas classée sous ui.nav.parametres (AIDES_PAR_ONGLET)")
+    if pb:
+        echec("(6f) champ d'emplacement du carton Plugin : " + " ; ".join(pb))
+        return
+    ok("(6f) carton Plugin : champ d'emplacement + « ? » + avertissement Overwrite / "
+       "Merge / Cancel (fr + en) avant « Installer le plugin », via savePluginSlot "
+       "(/api/plugin_slot), emplacement enregistré avant l'installation")
+
     # (c) audit de source : réemploi, aucun auto-skip
     m_rendu = _re.search(r"^function assistantMiseEnRouteSuivant\(\) \{.*?^\}", js, _re.S | _re.M)
     m_act = _re.search(r"^function _mrAction\(id\) \{.*?^\}", js, _re.S | _re.M)
     if not m_rendu or not m_act:
         echec("(6c) assistantMiseEnRouteSuivant / _mrAction introuvables")
         return
+    m_inst = _re.search(r"^async function _mrInstallerPlugin\(\) \{.*?^\}", js, _re.S | _re.M)
+    if not m_inst or "pluginInstaller(" not in m_inst.group(0) \
+            or "savePluginSlot(" not in m_inst.group(0) \
+            or m_inst.group(0).find("savePluginSlot(") > m_inst.group(0).find("pluginInstaller("):
+        echec("(6f) _mrInstallerPlugin doit enregistrer l'emplacement (savePluginSlot) "
+              "AVANT d'appeler pluginInstaller")
+        return
     manque = [f for f in ("fwImportBin(", "fwImportCapture(", "fwCaptureAmorcer(",
-                          "pluginInstaller(", "configGuideeDemarrer(", "fwExport(")
+                          "_mrInstallerPlugin(", "configGuideeDemarrer(", "fwExport(")
               if f not in m_act.group(0)]
     if manque:
         echec("(6c) l'assistant ne réutilise pas les fonctions existantes", ", ".join(manque))

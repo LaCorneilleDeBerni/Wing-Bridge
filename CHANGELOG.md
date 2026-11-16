@@ -21,6 +21,10 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- Plugin location in the grandMA3 Plugins pool: the default is now 1 (was 3),
+  and the setup assistant's Plugin card shows the field before “Install the
+  plugin”, with a note that grandMA3 asks Overwrite, Merge or Cancel when the
+  slot is taken. A new “?” help topic explains it.
 - The “settings to make in grandMA3” help is rewritten for a new user, in the
   order they are needed: an open session with the network on (Menu → Network),
   then OSC, then the plugin, then the keyboard shortcuts. A short version opens

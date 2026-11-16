@@ -872,17 +872,17 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
     </div>
 
     <!-- Emplacement (slot) du pool Plugins de MA3 pour l'install automatique.
-         SETTINGS["plugin_slot"] (wing_ui.py), défaut 3 = comportement d'avant
-         ce réglage. Discret : chaque wing/show étant différent, rien ne
-         garantit que le slot 3 soit libre chez tout le monde — voir
+         SETTINGS["plugin_slot"] (wing_ui.py), défaut 1. Chaque
+         show étant différent, rien ne garantit que ce slot soit libre chez
+         tout le monde (MA3 demande alors Overwrite / Merge / Cancel) — voir
          docs/GRANDMA3_SYNC.md. Même réglage que le champ de l'aiguillage de
          fin d'assistant firmware (Windows) : les deux lisent/écrivent
          SETTINGS["plugin_slot"], synchronisés via /api/status. -->
     <div class="toolbar" style="margin-top:8px">
       <span class="muted" data-i18n="ui.param.gma3.plugin_slot_label">Emplacement du plugin →</span>
       <input type="number" id="pluginSlotInput" min="1" max="9999"
-             style="width:70px;text-align:center" placeholder="3"
-             title="Emplacement (slot) du pool Plugins de MA3 où l'installation automatique importe l'amorce. 3 par défaut — change-le si ce slot est déjà pris par un autre plugin." data-i18n-title="ui.param.gma3.plugin_slot_tip">
+             style="width:70px;text-align:center" placeholder="1"
+             title="Emplacement (slot) du pool Plugins de MA3 où l'installation automatique importe l'amorce. 1 par défaut — change-le si ce slot est déjà pris par un autre plugin." data-i18n-title="ui.param.gma3.plugin_slot_tip">
       <button class="btn" onclick="savePluginSlot(document.getElementById('pluginSlotInput').value, 'pluginSlotMsg')" data-i18n="ui.param.gma3.plugin_slot_appliquer">Appliquer</button>
       <span class="muted" id="pluginSlotMsg" style="font-size:12.5px"></span>
     </div>
@@ -915,7 +915,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
            majPluginProcedureManuelle() (ui/parametres.js) via tHtml(clé,
            {slot}), appelée à l'init, à chaque poll de Paramètres et à la
            bascule de langue. Le contenu ci-dessous n'est qu'un repli statique
-           (slot 3, le défaut) affiché avant le premier rendu JS. -->
+           (slot 1, le défaut) affiché avant le premier rendu JS. -->
       <div class="hbody" id="gma3PluginBody">
         <b>1. Copier les fichiers</b> sur <b>chaque</b> machine qui fait tourner
         MA3 (importer un show ne les copie pas) :<br>
@@ -928,16 +928,16 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
         <code>wingloader.xml</code> (dossier <code>plugin_ma3</code>) vers
         <code>C:\ProgramData\MALightingTechnology\gma3_library\datapools\plugins\</code>.<br>
         <b>2. Dans grandMA3</b>, une commande après l'autre :<br>
-        &nbsp;&nbsp;<code>Import Plugin Library "wingloader.xml" At 3</code><br>
-        &nbsp;&nbsp;<code>Set Plugin 3.1 Property "Installed" "Yes"</code><br>
-        &nbsp;&nbsp;<code>Plugin 3</code><br>
-        &nbsp;&nbsp;(si MA3 propose <b>Overwrite / Merge / Cancel</b> — slot 3
+        &nbsp;&nbsp;<code>Import Plugin Library "wingloader.xml" At 1</code><br>
+        &nbsp;&nbsp;<code>Set Plugin 1.1 Property "Installed" "Yes"</code><br>
+        &nbsp;&nbsp;<code>Plugin 1</code><br>
+        &nbsp;&nbsp;(si MA3 propose <b>Overwrite / Merge / Cancel</b> — slot 1
         déjà occupé — choisis <b>Overwrite</b>.)<br>
         <b>3. Enregistre le show</b> : l'emplacement du plugin fait partie du
         showfile ; sans sauvegarde il disparaît au redémarrage de MA3 (les
         fichiers sur le disque, eux, restent).<br>
         <span class="muted">Une fois l'amorce importée, toute nouvelle version de
-        la sonde est prise au prochain <code>Plugin 3</code> — sans re-import ni
+        la sonde est prise au prochain <code>Plugin 1</code> — sans re-import ni
         redémarrage de MA3.</span>
       </div>
     </details>

@@ -392,7 +392,7 @@ _PLUGIN_PROD = ("wingbridge.lua", "wingbridge.xml",
 # documentées par MA3 : le manuel installé (keyword_plugin.html, plugins.html)
 # ne donne aucun plafond numérique du pool Plugins — ne pas présenter 9999
 # comme une limite MA3, seulement comme un garde-fou de saisie.
-PLUGIN_SLOT_MIN, PLUGIN_SLOT_MAX, PLUGIN_SLOT_DEFAUT = 1, 9999, 3
+PLUGIN_SLOT_MIN, PLUGIN_SLOT_MAX, PLUGIN_SLOT_DEFAUT = 1, 9999, 1
 
 
 def _plugin_osc(slot: int) -> tuple:
@@ -409,7 +409,7 @@ def _plugin_osc(slot: int) -> tuple:
             f'Plugin {slot}',
             'SaveShow')
 
-# Fichiers .lua qui doivent être posés sur le disque pour que « Plugin 3 »
+# Fichiers .lua qui doivent être posés sur le disque pour que « Plugin <slot> »
 # charge quelque chose. On teste les DEUX .lua (amorce + sonde) : les .xml
 # décrivent l'entrée du pool, mais c'est le code Lua qui manque quand un show
 # a été importé sans copier les fichiers sur cette machine.

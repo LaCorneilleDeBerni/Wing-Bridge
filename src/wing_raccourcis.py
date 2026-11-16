@@ -273,7 +273,7 @@ def _shcuts_ma3_reel(texte: str):
     if not liste:
         return None, (e.get("raccourcis_note")
                       or "la sonde ne remonte pas les raccourcis "
-                         "(plugin MA3 à relancer : Plugin 3 deux fois)")
+                         "(plugin MA3 à relancer : deux fois de suite)")
     entrees = _shcuts_entrees(texte, executors=True)
     if len(entrees) != len(liste):
         return None, (f"désaccord de structure : {len(liste)} raccourcis dans "

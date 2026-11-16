@@ -1152,7 +1152,7 @@ class Handler(BaseHTTPRequestHandler):
         """Emplacement (slot) du pool Plugins de MA3 pour l'install automatique.
 
         Hors bornes (1..9999, garde-fou de saisie — pas un plafond documenté
-        par MA3, voir wing_ma3.PLUGIN_SLOT_MAX) : repli sur le défaut (3) et
+        par MA3, voir wing_ma3.PLUGIN_SLOT_MAX) : repli sur le défaut (1) et
         message actionnable, pas un rejet muet de la requête.
         """
         import wing_ui as core

@@ -74,7 +74,7 @@ class Etat:
             "encodeurs_ma3": False,
             # DMX réseau « local uniquement » : défaut FALSE (norme du métier).
             "dmx_local": False,
-            "plugin_slot": 3,        # slot du pool Plugins pour l'amorce
+            "plugin_slot": 1,        # slot du pool Plugins pour l'amorce
             "shcuts_horodate": None, # dernier envoi réussi des raccourcis (epoch)
         }
         self.OSC = udp_client.SimpleUDPClient(wb.MA3_IP, wb.MA3_PORT)

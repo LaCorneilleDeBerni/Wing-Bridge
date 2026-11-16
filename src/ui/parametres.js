@@ -391,6 +391,11 @@ function cartonsMiseEnRoute(s, plateforme, local) {
   } else if (!d.present) {
     plugin = carton("plugin", "rouge", "ui.mr.plugin.rouge_absent",
       [{ id: "installer_plugin", cle: "ui.mr.plugin.installer" }], false);
+    // Champ de l'emplacement (pool Plugins) AVANT le bouton, avec l'avertissement
+    // Overwrite / Merge / Cancel : l'app ne peut pas savoir si la case est prise.
+    plugin.champ = "plugin_slot";
+    plugin.note = "ui.mr.plugin.slot_avert";
+    plugin.aide = "pluginSlot";
   } else {
     plugin = carton("plugin", "rouge", "ui.mr.plugin.rouge_arrete",
       [{ id: "relancer_plugin", cle: "ui.mr.plugin.relancer" }], false);
@@ -516,6 +521,38 @@ function assistantMiseEnRouteRendre() {
         note.textContent = t("ui.mr.fw.note_autre");
         li.appendChild(note);
       }
+      if (c.champ === "plugin_slot") {
+        // Même réglage et même route (/api/plugin_slot, savePluginSlot) que le
+        // champ de la carte grandMA3 : rien n'est dupliqué, seulement affiché.
+        const ligne = document.createElement("div");
+        ligne.className = "toolbar";
+        ligne.style.marginTop = "8px";
+        const lib = document.createElement("span");
+        lib.className = "muted";
+        lib.textContent = t("ui.mr.plugin.slot_label");
+        const champ = document.createElement("input");
+        champ.type = "number";
+        champ.id = "mrSlotInput";
+        champ.min = "1";
+        champ.max = "9999";
+        champ.style.cssText = "width:70px;text-align:center";
+        champ.value = (_mrStatut && _mrStatut.plugin_slot != null) ? _mrStatut.plugin_slot : "";
+        champ.onchange = function () { savePluginSlot(champ.value, "mrMsg"); };
+        const aideBtn = document.createElement("button");
+        aideBtn.className = "aide";
+        aideBtn.textContent = "?";
+        aideBtn.title = t("ui.commun.en_savoir_plus");
+        aideBtn.onclick = function () { aide(c.aide); };
+        ligne.appendChild(lib);
+        ligne.appendChild(champ);
+        ligne.appendChild(aideBtn);
+        li.appendChild(ligne);
+        const avert = document.createElement("div");
+        avert.className = "muted";
+        avert.style.cssText = "margin-top:4px;font-size:12.5px";
+        avert.textContent = t(c.note);
+        li.appendChild(avert);
+      }
       if (c.actions.length) {
         const bar = document.createElement("div");
         bar.className = "toolbar";
@@ -560,6 +597,14 @@ function assistantMiseEnRoutePrecedent() {
   assistantMiseEnRouteRendre();
 }
 
+// Enregistre d'abord le numéro saisi (le « change » du champ ne part qu'à la
+// perte du focus), puis lance l'installation avec CE numéro.
+async function _mrInstallerPlugin() {
+  const champ = document.querySelector("#mrSlotInput");
+  if (champ) await savePluginSlot(champ.value, "mrMsg");
+  return pluginInstaller("mrMsg");
+}
+
 // Les actions REPRENNENT les fonctions existantes, rien n'est réécrit ici.
 function _mrAction(id) {
   if (id === "capturer") {
@@ -574,7 +619,7 @@ function _mrAction(id) {
   else if (id === "import_capture") fwImportCapture();
   else if (id === "exporter") fwExport();
   else if (id === "aide_osc") aide("demarrage");
-  else if (id === "installer_plugin") pluginInstaller("mrMsg");
+  else if (id === "installer_plugin") _mrInstallerPlugin();
   else if (id === "relancer_plugin") _relancerPlugin("mrMsg", null);
   else if (id === "config_guidee") {
     assistantMiseEnRouteFermer();
@@ -1191,7 +1236,7 @@ let _pluginSlotAffiche = null;   // dernière valeur rendue dans la procédure m
 // Ne pas écraser une saisie en cours (même principe que oscFieldsBusy, voir ui/core.js).
 function _pluginSlotFieldsBusy() {
   const a = document.activeElement;
-  return a && a.id === "pluginSlotInput";
+  return a && (a.id === "pluginSlotInput" || a.id === "mrSlotInput");
 }
 
 // Rend la procédure manuelle (<details> de la carte grandMA3) avec le slot
@@ -1210,6 +1255,8 @@ function majPluginProcedureManuelle(slot) {
 function _majPluginSlotUI(slot) {
   const a = document.getElementById("pluginSlotInput");
   if (a && document.activeElement !== a) a.value = slot;
+  const m = document.querySelector("#mrSlotInput");   // champ de l'assistant de mise en route
+  if (m && document.activeElement !== m) m.value = slot;
   if (slot !== _pluginSlotAffiche) majPluginProcedureManuelle(slot);
 }
 

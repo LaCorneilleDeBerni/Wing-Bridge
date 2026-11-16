@@ -67,12 +67,12 @@
 --  ===========================================================================
 --  INSTALLATION - PAR L'AMORCE, c'est la seule a retenir
 --    1. Sur le Mac : ./installer.sh
---    2. Dans MA3 :   Import Plugin Library "wingloader.xml" At 3
---                    Set Plugin 3.1 Property "Installed" "Yes"
---                    Plugin 3        (bascule marche/arret de la sonde)
+--    2. Dans MA3 :   Import Plugin Library "wingloader.xml" At 1
+--                    Set Plugin 1.1 Property "Installed" "Yes"
+--                    Plugin 1        (bascule marche/arret de la sonde)
 --    3. ENREGISTRER LE SHOW (l'emplacement du plugin en fait partie)
 --
---  MISE A JOUR : ./installer.sh, puis "Plugin 3" deux fois (arret/marche).
+--  MISE A JOUR : ./installer.sh, puis "Plugin 1" deux fois (arret/marche).
 --  L'amorce relit CE fichier a chaque appel : ni ReloadAllPlugins, ni
 --  re-import, ni redemarrage de MA3. Voir wingloader.lua.
 --
