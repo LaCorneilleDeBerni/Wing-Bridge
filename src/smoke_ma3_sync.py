@@ -590,6 +590,57 @@ def test_ma3_etat_transitoire(wm3):
 
         ok("raté transitoire → dernier bon état (stale) ; panne durable → état "
            "vide ; réinjection (grâce = 0) rouvre bien le bug")
+
+        # 5) LED d'un executor VIDE (chantier 2) : éteinte, mais SEULEMENT si la
+        #    sonde prouve le vide. Cas (a) sonde vivante qui balaie et ne liste
+        #    pas le numéro → 0 ; (b) pas de sonde / sans page / liste vide
+        #    (lecture échouée) → veilleuse comme avant ; (c) listé sans objet
+        #    mais nommé → pas vide (LED_MID) ; listé et tournant → plein feu.
+        import wing_ui as core
+        ref_orig = dict(etat.E.PROFILE.get("executor_ref", {}))
+        led_orig = etat.E.LED["ma3"]
+        etat_fn_orig = core.ma3_etat
+        try:
+            etat.E.LED["ma3"] = True
+            etat.E.PROFILE.setdefault("executor_ref", {})["0x7c"] = "Executor 105"
+            listee = [{"no": 101, "nom": "Spots", "objet": "Spots",
+                       "tourne": True},
+                      {"no": 201, "nom": "Wash", "actif": True}]
+            cas = {
+                "a vide prouvé": ({"actif": True, "page": {"no": 1},
+                                   "executors": listee}, 0x0000),
+                "b sans sonde": ({"actif": False, "page": None,
+                                  "executors": [], "erreur": "x"}, core.LED_GLOW),
+                "b sonde sans page": ({"actif": True, "page": None,
+                                       "executors": listee}, core.LED_GLOW),
+                "b liste vide": ({"actif": True, "page": {"no": 1},
+                                  "executors": []}, core.LED_GLOW),
+            }
+            for nom, (st, attendu) in cas.items():
+                core.ma3_etat = lambda st=st: st
+                got = core.niveau_led_ma3("0x7c")
+                if got != attendu:
+                    echec(f"LED executor absent, cas « {nom} » : "
+                          f"{got:#06x} au lieu de {attendu:#06x}", repr(st))
+                    return
+            for ex, attendu in (({"no": 105, "nom": "Spots"}, 0x0200),
+                                ({"no": 105, "nom": "S", "objet": "S",
+                                  "tourne": True}, core.LED_FULL)):
+                core.ma3_etat = lambda ex=ex: {"actif": True, "page": {"no": 1},
+                                               "executors": [ex]}
+                got = core.niveau_led_ma3("0x7c")
+                if got != attendu:
+                    echec(f"LED executor listé {ex} : {got:#06x} au lieu de "
+                          f"{attendu:#06x}")
+                    return
+            ok("LED executor : absent de la liste d'une sonde qui a balayé → 0 ; "
+               "sans sonde / sans page / liste vide → veilleuse ; listé → "
+               "inchangé")
+        finally:
+            core.ma3_etat = etat_fn_orig
+            etat.E.LED["ma3"] = led_orig
+            etat.E.PROFILE["executor_ref"].clear()
+            etat.E.PROFILE["executor_ref"].update(ref_orig)
     finally:
         wm3.MA3_ETAT_FICHIER = fichier_orig
         wm3.MA3_ETAT_GRACE_S = grace_orig

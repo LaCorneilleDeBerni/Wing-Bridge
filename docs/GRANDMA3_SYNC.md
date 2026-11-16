@@ -741,6 +741,19 @@ vite). ⚠️ Au relâchement d'un bouton on retombe sur le niveau MA3, **pas** 
 une veilleuse fixe — sinon la LED d'un executor qui tourne s'éteignait dès
 qu'on lâchait le bouton.
 
+**LED d'un emplacement VIDE** — éteinte (0), comme sur une vraie wing. La
+sonde ne liste que les emplacements qui portent quelque chose (relevé réel, MA3
+2.4.2 : 17 entrées sur une page de 390 emplacements) et ne balaie QUE la page
+courante, dont les numéros sont relatifs (101…) : l'absence d'un numéro de la
+liste veut donc dire « vide » pour la page affichée. `niveau_led_ma3` ne
+conclut au vide que si la sonde est vivante (`actif`), rapporte une `page` et
+rend une liste NON vide (elle rend aussi `[]` quand `Children()` échoue, ce qui
+ne se distingue pas d'une page entièrement vide : veilleuse, par prudence).
+Hors de ces cas, veilleuse comme avant. Un executor listé sans objet mais
+nommé (ex. 201, 307) n'est pas vide. ⚠️ HYPOTHÈSE à vérifier sur la wing :
+MA3 n'énumère jamais un emplacement vide. Contrôle : section 46 du test de
+fumée (réinjections : forcer la veilleuse pour le vide, forcer 0 sans sonde).
+
 **Rattrapage de fader** — ressuscité. Il avait été retiré parce que MA3 n'émet
 rien au changement de page ; la sonde donne désormais la position réelle.
 `pickup_autorise()` + `pickup_verifier_repos()`.

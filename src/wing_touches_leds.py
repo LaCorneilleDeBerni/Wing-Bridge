@@ -99,6 +99,26 @@ def enqueue_key_up(spec: str) -> bool:
 
 
 LED_MID = 0x0200         # séquence chargée mais pas en lecture
+LED_OFF = 0x0000         # emplacement vide : comme sur une vraie wing
+
+
+def _emplacement_vide_sur(core) -> bool:
+    """Vrai seulement si la sonde PROUVE qu'un executor absent est un emplacement vide.
+
+    La sonde Lua parcourt `page:Children()` de la page courante et n'y trouve
+    que les emplacements qui portent quelque chose (17 entrées sur une page de
+    390 emplacements, relevé réel) : « absent de la liste » veut donc dire
+    « vide », mais UNIQUEMENT si la lecture a bien eu lieu. Trois garde-fous,
+    sinon on garde la veilleuse (« on ne sait pas », comme avant) :
+      - sonde vivante (`actif`) — pas de fichier, périmé ou illisible : inconnu ;
+      - une page courante est rapportée (`page`) ;
+      - la liste n'est pas vide : la sonde rend aussi `[]` quand `Children()`
+        échoue, indiscernable d'une page entièrement vide.
+    Hypothèse, non démontrée : MA3 n'énumère jamais un emplacement vide.
+    """
+    etat_ma3 = core.ma3_etat()
+    return bool(etat_ma3.get("actif") and etat_ma3.get("page")
+                and etat_ma3.get("executors"))
 
 
 def niveau_led_ma3(key: str, attente=None) -> int:
@@ -110,7 +130,9 @@ def niveau_led_ma3(key: str, attente=None) -> int:
     donne, via `ex.object:IsRunningPlayback()`.
 
     Sans sonde, ou pour un bouton qui n'est pas un executor : veilleuse, soit
-    exactement le comportement d'avant.
+    exactement le comportement d'avant. Emplacement VIDE prouvé par la sonde
+    (absent de sa liste alors qu'elle a balayé la page) : LED éteinte, comme
+    sur une vraie wing.
     """
     import wing_ui as core
     if not etat.E.LED["ma3"]:
@@ -124,7 +146,9 @@ def niveau_led_ma3(key: str, attente=None) -> int:
     no = int(m.group(1))
     e = core.ma3_executor(no)
     if not e:
-        return core.LED_GLOW
+        # Absent de la liste de la sonde : VIDE seulement si la sonde est
+        # vivante et a réellement balayé la page. Sinon on ne sait pas.
+        return LED_OFF if _emplacement_vide_sur(core) else core.LED_GLOW
 
     # Fader pas encore rattrapé → clignotement, comme sur une command wing MA2.
     # C'est le signal le plus utile : il dit OÙ est le désaccord, sans avoir à

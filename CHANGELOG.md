@@ -9,6 +9,11 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- The LED of an executor button now goes fully off when the slot is empty, as on
+  a real wing. “Empty” is only concluded when the MA3 probe is alive, reports a
+  current page and lists other executors but not this one; without a probe, with
+  an empty list or for any listed executor, behaviour is unchanged (pilot light
+  or the usual levels).
 - The bridge now restarts by itself when a guided setup (or learn mode) that
   was started while the bridge was running ends, whether it finished or was
   stopped. It never restarts if the wing is unplugged, and a new
