@@ -1230,5 +1230,6 @@
   "ui.mr.sauvegarde.sauvegarder": "Sauvegarder la configuration",
   "ui.mr.sauvegarde.orange": "Conseillé : enregistre ta configuration avant de démarrer.",
   "ui.mr.sauvegarde.titre": "Sauvegarde",
+  "ui.mr.sauvegarde.vert": "Ta configuration est enregistrée.",
   "ui.mr.demarrage.demarrer": "Démarrer le bridge"
 }

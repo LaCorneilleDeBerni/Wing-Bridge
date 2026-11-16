@@ -801,17 +801,18 @@ for (const osc of [false, true]) for (const plug of [false, true])
 for (const verif of ["rouge", "passee", "faite"])
 for (const envoye of [false, true])
 for (const acces of ["ok", "ko", "windows", "absent"])
-for (const bridge of [false, true]) {
+for (const bridge of [false, true])
+for (const dirty of [false, true]) {
   const s = {firmware: {configure: fw}, capture: win ? {actif: false} : null,
              osc: {reachable: osc ? "ok" : "off", ma3: osc && plug ? ma3(true) : null},
              sonde: {present: plug, actif: plug},
              shcuts_horodate: envoye ? 1700000000 : null,
              console: {enabled: acces !== "absent", trusted: acces === "ok" || acces === "windows",
                        windows: acces === "windows"},
-             mode: bridge ? "bridge" : "idle"};
+             mode: bridge ? "bridge" : "idle", dirty: dirty};
   const c = cartonsMiseEnRoute(s, plateformeMiseEnRoute(s),
     {verifFaite: verif === "faite", verifPassee: verif === "passee"});
-  R.push({fw, win, osc, plug, verif, envoye, acces, bridge, plateforme: plateformeMiseEnRoute(s),
+  R.push({fw, win, osc, plug, verif, envoye, acces, bridge, dirty, plateforme: plateformeMiseEnRoute(s),
           cartons: c, suivants: c.map(mrSuivantActif)});
 }
 process.stdout.write(JSON.stringify(R));
@@ -836,6 +837,10 @@ process.stdout.write(JSON.stringify(R));
         if (rac["pastille"] == "vert") != rac_ok:
             echec("(6g) carton Raccourcis : pastille incohérente avec la détection "
                   "(envoi + Accessibilité)", f"{etiq} → {rac['pastille']}")
+            return
+        if sauv["pastille"] != ("orange" if c["dirty"] else "vert"):
+            echec("(6g) carton Sauvegarde : pastille incohérente avec s.dirty "
+                  "(vert = rien à enregistrer)", f"{etiq} dirty={c['dirty']} → {sauv['pastille']}")
             return
         if (dem["pastille"] == "vert") != c["bridge"]:
             echec("(6g) carton Démarrage : pastille incohérente avec l'état du bridge",

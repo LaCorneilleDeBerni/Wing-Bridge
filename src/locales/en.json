@@ -1230,5 +1230,6 @@
   "ui.mr.sauvegarde.sauvegarder": "Save the configuration",
   "ui.mr.sauvegarde.orange": "Recommended: save your configuration before starting.",
   "ui.mr.sauvegarde.titre": "Save",
+  "ui.mr.sauvegarde.vert": "Your configuration is saved.",
   "ui.mr.demarrage.demarrer": "Start the bridge"
 }

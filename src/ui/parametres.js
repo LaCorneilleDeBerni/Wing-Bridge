@@ -448,10 +448,14 @@ function cartonsMiseEnRoute(s, plateforme, local) {
   // se détecte pas : le bouton est proposé, jamais exigé.
   const demarre = s.mode === "bridge";
   // Deux cartons distincts, une action chacun : d'abord enregistrer, ensuite
-  // démarrer. La sauvegarde n'est pas détectable : carton orange (conseillé),
-  // « Suivant » toujours possible.
-  const sauv = carton("sauvegarde", "orange", "ui.mr.sauvegarde.orange",
-    [{ id: "sauvegarder", cle: "ui.mr.sauvegarde.sauvegarder" }], true);
+  // démarrer. Détection réelle : s.dirty (« modifié depuis le dernier
+  // enregistrement », le même point que dans l'en-tête). Vert = rien à
+  // enregistrer ; orange = des modifications non enregistrées (conseillé).
+  const sauv = s.dirty === false
+    ? carton("sauvegarde", "vert", "ui.mr.sauvegarde.vert",
+        [{ id: "sauvegarder", cle: "ui.mr.sauvegarde.sauvegarder" }], true)
+    : carton("sauvegarde", "orange", "ui.mr.sauvegarde.orange",
+        [{ id: "sauvegarder", cle: "ui.mr.sauvegarde.sauvegarder" }], true);
   const dem = demarre
     ? carton("demarrage", "vert", "ui.mr.demarrage.vert", [], true)
     : carton("demarrage", "rouge", "ui.mr.demarrage.rouge",
