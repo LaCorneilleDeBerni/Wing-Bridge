@@ -35,10 +35,26 @@ function clesFirmwareManquant(s) {
 }
 
 // ── Status polling ────────────────────────────────────────────────────
+// Premier poll après le chargement de la page : le serveur peut être resté en
+// apprentissage (page rechargée, F5) alors que la page s'ouvre toujours sur
+// l'onglet Bridge. Pendant l'apprentissage les touches de la wing ne partent
+// PAS vers MA3 : l'utilisateur doit le voir et pouvoir l'arrêter, donc on
+// ouvre l'onglet Touches, où vit le bouton « ⏹ Arrêter l'apprentissage ».
+// (Constat de l'auteur, 16/11/2026.) Une seule fois, pour ne jamais retirer
+// l'onglet de sous les doigts de quelqu'un qui navigue ensuite.
+let ongletInitialVerifie = false;
+
 async function poll() {
   try {
     const s = await api("/api/status");
     currentMode = s.mode;
+    if (!ongletInitialVerifie) {
+      ongletInitialVerifie = true;
+      if (s.mode === "learn") {
+        const b = document.querySelector('nav button[data-tab="touches"]');
+        if (b) b.click();
+      }
+    }
     currentRepriseArmee = !!s.reprise_armee;
 
     // ── Panneau santé (état de la chaîne) ──

@@ -9,6 +9,9 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- Reloading the page while the learning mode is active no longer leaves you on
+  the Bridge tab with the wing silently not sending to MA3: the Touches tab
+  opens, where the “Stop learning” button is.
 - The LED of an executor button now goes fully off when the slot is empty, as on
   a real wing. “Empty” is only concluded when the MA3 probe is alive, reports a
   current page and lists other executors but not this one; without a probe, with

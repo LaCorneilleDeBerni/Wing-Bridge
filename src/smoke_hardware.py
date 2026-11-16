@@ -614,6 +614,19 @@ def _exclusion_apprentissage_guide():
                        "en cours » : on pourrait lancer les deux modes")
     if "appliquerBoutonsApprentissage();" not in (corps(poll_js, "poll") or ""):
         defauts.append("poll() ne passe plus par appliquerBoutonsApprentissage")
+    # Page rechargée pendant un apprentissage : l'onglet Touches doit s'ouvrir
+    # (constat de l'auteur, 16/11/2026) — le serveur est resté en « learn ».
+    corps_poll = corps(poll_js, "poll") or ""
+    # ⚠️ `s.mode === "learn"` apparaît AUSSI ailleurs dans poll() : on exige
+    # donc la SÉQUENCE (condition → ouverture de l'onglet), pas la présence
+    # séparée des morceaux (une réinjection est passée verte avec l'ancienne
+    # version de ce test).
+    import re as _re
+    if not (_re.search(r's\.mode === "learn"\)\s*\{\s*const b = document\.querySelector\('
+                       r'\'nav button\[data-tab="touches"\]\'\)', corps_poll)
+            and "ongletInitialVerifie" in corps_poll):
+        defauts.append("poll() n'ouvre plus l'onglet Touches quand la page se "
+                       "recharge pendant un apprentissage")
     if 'id="btnAssistant" onclick="assistantBasculer()"' not in html:
         defauts.append("le bouton de l'assistant n'appelle plus assistantBasculer "
                        "(il ne serait plus son propre bouton d'arrêt)")
