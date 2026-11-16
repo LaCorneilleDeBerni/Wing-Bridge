@@ -38,6 +38,9 @@ def statut() -> dict:
             "suivre_ma3": etat.E.SETTINGS.get("suivre_ma3", True),
             "fader_pickup": etat.E.SETTINGS.get("fader_pickup", True),
             "verbe_cible": etat.E.SETTINGS.get("verbe_cible", True),
+            "reprise_bridge_apres_guide": etat.E.SETTINGS.get("reprise_bridge_apres_guide", True),
+            "reprise_armee": (etat.E.STATE["mode"] == "learn"
+                              and etat.E.STATE["resume_mode"] == "bridge"),
             # `encodeurs_ma3` RÉINTRODUIT : cette fois elle pilote
             # réellement, via enc_attr_selon_ma3()
             # (wing_faders.py). `encodeurs` reste l'OBSERVATION brute.
@@ -78,6 +81,8 @@ def statut() -> dict:
         "suivre_ma3": instantane["suivre_ma3"],
         "fader_pickup": instantane["fader_pickup"],
         "verbe_cible": instantane["verbe_cible"],
+        "reprise_bridge_apres_guide": instantane["reprise_bridge_apres_guide"],
+        "reprise_armee": instantane["reprise_armee"],
         "encodeurs_ma3": instantane["encodeurs_ma3"],
         "plugin_slot": instantane["plugin_slot"],
         "shcuts_horodate": instantane["shcuts_horodate"],

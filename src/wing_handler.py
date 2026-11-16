@@ -310,6 +310,7 @@ class Handler(BaseHTTPRequestHandler):
         ("/api/fader_pickup", "_post_fader_pickup"),
         ("/api/shcuts/envoyer", "_post_shcuts_envoyer"),
         ("/api/verbe_cible", "_post_verbe_cible"),
+        ("/api/reprise_bridge", "_post_reprise_bridge"),
         ("/api/suivre_ma3", "_post_suivre_ma3"),
         ("/api/encodeurs_ma3", "_post_encodeurs_ma3"),
         ("/api/plugin_slot", "_post_plugin_slot"),
@@ -607,18 +608,31 @@ class Handler(BaseHTTPRequestHandler):
         # 🔒 Décision ET écriture de STATE dans UN SEUL bloc `with etat.E.LOCK:` : deux
         # blocs séparés laissaient `STATE["wing"]` changer entre le test et l'écriture.
         # Journal et relance de l'assistant restent hors verrou.
+        #
+        # 🔑 Reprise du bridge après un apprentissage / une configuration guidée
+        # lancé(e) bridge actif (option `reprise_bridge_apres_guide`) : entrer en
+        # « learn » depuis « bridge » arme `resume_mode`, et sortir de « learn »
+        # vers « idle » (fin normale OU annulation — c'est le même appel) rebascule
+        # en « bridge ». Jamais sans wing : la décision lit `STATE["wing"]`.
+        # « learn » lancé depuis « bridge » arme la reprise ; tout le reste (dont
+        # l'arrêt volontaire) la désarme. Le bloc reste COURT : le contrôle 58
+        # exige le `with` à moins de 15 lignes de chaque écriture de STATE.
         with etat.E.LOCK:
+            precedent = etat.E.STATE["mode"]
+            option = etat.E.SETTINGS.get("reprise_bridge_apres_guide", True)
             refuse = mode in ("bridge", "learn") and not etat.E.STATE["wing"]
+            reprise = (mode == "idle" and precedent == "learn" and option
+                       and etat.E.STATE["wing"] and etat.E.STATE["resume_mode"] == "bridge")
+            mode = "bridge" if reprise else mode
             if refuse:
                 etat.E.STATE["mode"] = "idle"
                 etat.E.STATE["resume_mode"] = mode if mode == "bridge" else None
             else:
                 etat.E.STATE["mode"] = mode
                 etat.E.STATE["last_event"] = None
-                if mode == "bridge":
-                    etat.E.STATE["cmd_buf"] = ""
-                elif mode == "idle":
-                    etat.E.STATE["resume_mode"] = None   # arrêt volontaire : on désarme
+                etat.E.STATE["cmd_buf"] = "" if mode == "bridge" else etat.E.STATE["cmd_buf"]
+                etat.E.STATE["resume_mode"] = (
+                    "bridge" if (mode == "learn" and precedent == "bridge" and option) else None)
         if refuse:
             core.log("journal.mode.pas_demarre_bridge" if mode == "bridge"
                      else "journal.mode.pas_demarre_learn")
@@ -633,7 +647,8 @@ class Handler(BaseHTTPRequestHandler):
             if not core.console_helper_alive():
                 core.log("journal.mode.kbd_relancement")
                 core.restart_keyboard_helper()
-            core.log("journal.mode.bridge_demarre")
+            core.log("journal.mode.bridge_repris_apres_guide" if reprise
+                     else "journal.mode.bridge_demarre")
         elif mode == "learn":
             core.log("journal.mode.apprentissage")
         else:
@@ -1168,6 +1183,22 @@ class Handler(BaseHTTPRequestHandler):
         core.log("journal.reglage.verbe_on" if etat.E.SETTINGS["verbe_cible"]
                  else "journal.reglage.verbe_off")
         self._json({"ok": True, "actif": etat.E.SETTINGS["verbe_cible"]})
+
+    def _post_reprise_bridge(self, body):
+        # Réglage MACHINE persistant : relancer le bridge à la fin d'un
+        # apprentissage ou d'une configuration guidée lancé(e) bridge actif.
+        import wing_ui as core
+        actif = wv.booleen(body, "actif", True)
+        core.reglage_poser(reprise_bridge_apres_guide=actif)
+        if not actif:
+            # Décoché en plein apprentissage : on désarme la reprise déjà posée.
+            with etat.E.LOCK:
+                if etat.E.STATE["mode"] == "learn":
+                    etat.E.STATE["resume_mode"] = None
+        core.save_settings()
+        core.log("journal.reglage.reprise_bridge_on" if actif
+                 else "journal.reglage.reprise_bridge_off")
+        self._json({"ok": True, "actif": actif})
 
     def _post_suivre_ma3(self, body):
         import wing_ui as core

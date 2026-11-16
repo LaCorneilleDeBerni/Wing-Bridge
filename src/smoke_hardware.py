@@ -435,12 +435,143 @@ def test_boutons_honnetes(ui):
         # ── f) la pastille « Wing USB » ne dit pas « ne peut pas démarrer »
         #       à une wing qui tourne ───────────────────────────────────────
         _pastille_firmware_honnete()
+
+        # ── g) apprentissage / configuration guidée lancé(e) bridge actif :
+        #       le bridge repart à la fin (voir _reprise_apres_guide) ─────────
+        _reprise_apres_guide(ui)
     except Exception as e:
         echec("le contrôle des boutons a levé une exception",
               f"{type(e).__name__}: {e}")
     finally:
         ui.log = vrai_log
         etat.E.STATE.update(sauve)
+
+
+def _reprise_apres_guide(ui):
+    """(g) Le bridge repart après un apprentissage lancé bridge actif.
+
+    Demande de l'auteur : bridge actif, on lance une configuration guidée
+    (mode « learn »), à la fin le bridge doit être actif de nouveau, pas
+    « inactif ». Mécanisme : `resume_mode` (le même que la reprise après un
+    arrachage). Cas vérifiés, un par un :
+      1. bridge actif + learn + fin (idle)      -> bridge actif ;
+      2. bridge inactif + learn + fin           -> reste inactif ;
+      3. option décochée                        -> comportement d'avant (idle) ;
+      4. wing absente à la fin                  -> pas de reprise ;
+      5. arrachage PENDANT le learn (vraie boucle USB) -> resume_mode effacé,
+         donc aucune reprise fantôme au rebranchement ;
+      6. l'option se règle par /api/reprise_bridge et décocher désarme.
+    """
+    import threading as _th
+    cles = ("wing", "mode", "connecting", "resume_mode", "want_connected")
+    sauve = {k: etat.E.STATE.get(k) for k in cles}
+    option_avant = etat.E.SETTINGS.get("reprise_bridge_apres_guide", True)
+    save_avant, log_avant = ui.save_settings, ui.log
+    ui.save_settings = lambda: True      # ne pas écrire le vrai settings.json
+    ui.log = lambda *a, **k: None
+    echecs = []
+
+    def fin_de_guide(mode_initial, option=True, wing_a_la_fin=True):
+        """Pose l'état, lance learn, termine par idle ; rend le mode final."""
+        etat.E.SETTINGS["reprise_bridge_apres_guide"] = option
+        etat.E.STATE.update(wing=True, mode=mode_initial, resume_mode=None)
+        _poster(ui, "/api/mode", {"mode": "learn"})
+        if etat.E.STATE["mode"] != "learn":
+            return "learn_refuse"
+        etat.E.STATE["wing"] = wing_a_la_fin
+        _poster(ui, "/api/mode", {"mode": "idle"})
+        return etat.E.STATE["mode"]
+
+    try:
+        cas = [
+            ("1. bridge actif + learn + fin", dict(mode_initial="bridge"), "bridge"),
+            ("2. bridge inactif + learn + fin", dict(mode_initial="idle"), "idle"),
+            ("3. option décochée", dict(mode_initial="bridge", option=False), "idle"),
+            ("4. wing absente à la fin", dict(mode_initial="bridge",
+                                              wing_a_la_fin=False), "idle"),
+        ]
+        for nom, args, attendu in cas:
+            obtenu = fin_de_guide(**args)
+            if obtenu != attendu:
+                echecs.append(f"{nom} : attendu {attendu!r}, obtenu {obtenu!r}")
+        # Cas 4 : la fin sans wing ne doit pas laisser un resume_mode armé
+        # qui relancerait le bridge au rebranchement.
+        if etat.E.STATE["resume_mode"] == "bridge":
+            echecs.append("4. wing absente : resume_mode resté « bridge » "
+                          "(reprise fantôme au rebranchement)")
+
+        # 6. réglage : le POST pose et persiste, décocher en plein learn désarme.
+        etat.E.SETTINGS["reprise_bridge_apres_guide"] = True
+        etat.E.STATE.update(wing=True, mode="bridge", resume_mode=None)
+        _poster(ui, "/api/mode", {"mode": "learn"})
+        if etat.E.STATE["resume_mode"] != "bridge":
+            echecs.append("6. learn lancé bridge actif : la reprise n'est pas armée")
+        _poster(ui, "/api/reprise_bridge", {"actif": False})
+        if (etat.E.SETTINGS["reprise_bridge_apres_guide"] is not False
+                or etat.E.STATE["resume_mode"] is not None):
+            echecs.append("6. décocher l'option ne la pose pas / ne désarme pas")
+        _poster(ui, "/api/mode", {"mode": "idle"})
+        if etat.E.STATE["mode"] != "idle":
+            echecs.append("6. option décochée en plein learn : la fin devrait "
+                          "rester « idle »")
+
+        # 5. arrachage PENDANT le learn : vraie boucle USB, doublures.
+        etat.E.SETTINGS["reprise_bridge_apres_guide"] = True
+        etat.E.STATE.update(wing=True, mode="bridge", resume_mode=None,
+                            want_connected=True, connecting=False)
+        _poster(ui, "/api/mode", {"mode": "learn"})
+        armee = etat.E.STATE["resume_mode"] == "bridge"
+        sauv = {"cycle": ui.cycle_dmx, "absente": ui.wing_init.wing_absente,
+                "connect": ui.connect_wing, "dev": etat.E.DEV[0],
+                "interval": etat.E.AUTO["interval"], "ledma3": etat.E.LED["ma3"]}
+        tours = {"n": 0}
+
+        def faux_cycle(dev):
+            tours["n"] += 1
+            if tours["n"] == 3:
+                raise ui.WingUnplugged()
+            if tours["n"] > 12:
+                ui.USB_ARRET.set()
+            return b"\x00" * 96
+
+        def faux_connect(force=False, quiet=False):
+            ui.USB_ARRET.set()         # pas de rebranchement : on s'arrête là
+
+        try:
+            ui.cycle_dmx = faux_cycle
+            ui.wing_init.wing_absente = lambda: False
+            ui.connect_wing = faux_connect
+            etat.E.AUTO["interval"] = 0.0
+            etat.E.LED["ma3"] = False
+            etat.E.DEV[0] = object()
+            ui.USB_ARRET.clear(); ui.USB_SORTIE.clear()
+            fil = _th.Thread(target=ui.usb_loop, daemon=True)
+            fil.start()
+            fil.join(timeout=20)
+        finally:
+            ui.USB_ARRET.set()
+            time.sleep(0.05)
+            ui.cycle_dmx = sauv["cycle"]; ui.wing_init.wing_absente = sauv["absente"]
+            ui.connect_wing = sauv["connect"]; etat.E.DEV[0] = sauv["dev"]
+            etat.E.AUTO["interval"] = sauv["interval"]; etat.E.LED["ma3"] = sauv["ledma3"]
+            ui.USB_ARRET.clear(); ui.USB_SORTIE.clear()
+        if not armee or tours["n"] < 3:
+            echecs.append("5. scénario non concluant (reprise non armée ou "
+                          f"boucle non exécutée : {tours['n']} tour(s))")
+        elif etat.E.STATE["resume_mode"] == "bridge":
+            echecs.append("5. arrachage PENDANT le learn : resume_mode reste "
+                          "« bridge » — le bridge repartirait seul au rebranchement")
+    finally:
+        ui.save_settings, ui.log = save_avant, log_avant
+        etat.E.SETTINGS["reprise_bridge_apres_guide"] = option_avant
+        etat.E.STATE.update(sauve)
+    if echecs:
+        for e in echecs:
+            echec("reprise du bridge après configuration guidée", e)
+    else:
+        ok("reprise du bridge après un apprentissage : bridge actif -> repart ; "
+           "inactif -> reste inactif ; option décochée, wing absente ou arrachage "
+           "-> jamais de reprise")
 
 
 # Ce qu'une pastille/bannière « firmware absent » n'a PAS le droit de dire à

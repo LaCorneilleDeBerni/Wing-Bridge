@@ -9,6 +9,7 @@
 
 let profile = null;
 let currentMode = "idle";
+let currentRepriseArmee = false;   // learn lancé bridge actif : le bridge repartira à la fin
 let hlFader = -1, hlTimer = null;
 
 // Fermeture volontaire (quitApp / hardReset) : ne PAS re-déclencher le dialogue

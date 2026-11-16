@@ -7,7 +7,13 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- The bridge now restarts by itself when a guided setup (or learn mode) that
+  was started while the bridge was running ends, whether it finished or was
+  stopped. It never restarts if the wing is unplugged, and a new
+  “Guided setup” checkbox in Settings (checked by default, saved in
+  `settings.json`) turns this off to get the previous behaviour.
 
 ## [1.0.2] — 2026-11-16
 

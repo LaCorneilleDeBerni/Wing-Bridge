@@ -1092,6 +1092,17 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
     </div></details>
   </div>
 
+  <!-- ═══ Configuration guidée : reprise du bridge ═══
+       Réglage machine `reprise_bridge_apres_guide` (settings.json), défaut coché.
+       Bridge actif + configuration guidée / apprentissage : à la fin (terminée ou
+       arrêtée), le bridge repart. Jamais si la wing est débranchée. -->
+  <div class="card" id="repriseCard">
+    <h2 data-i18n="ui.param.reprise.titre">🧭 Configuration guidée</h2>
+    <div class="reglage">
+      <label><input type="checkbox" id="repriseBridge" onchange="saveRepriseBridge()"> <span data-i18n="ui.param.reprise.label">Relancer le bridge à la fin d'une configuration guidée (si le bridge était actif avant)</span></label>
+    </div>
+  </div>
+
   <!-- ═══ 5. Détection USB ═══
        Scanne l'USB, identifie les command wings MA2 compatibles et les
        candidats, propose un test de handshake. JS : scanUSB (ui/parametres.js). -->

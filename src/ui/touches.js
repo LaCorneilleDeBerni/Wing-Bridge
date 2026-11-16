@@ -17,15 +17,16 @@
 // La liste des étapes vient du SERVEUR (/api/assistant) : elle est écrite et
 // vérifiée à un seul endroit, et le test de fumée s'assure qu'aucune étape ne
 // propose une commande que l'app ne saurait pas envoyer.
-let assistant = {actif: false, etapes: [], i: 0, faites: 0};
+let assistant = {actif: false, etapes: [], i: 0, faites: 0, aLanceLearn: false};
 
 async function assistantDemarrer() {
   if (assistant.actif) return;
   let d;
   try { d = await (await fetch("/api/assistant")).json(); }
   catch (e) { return; }
-  assistant = {actif: true, etapes: d.etapes, i: 0, faites: 0};
-  if (currentMode !== "learn") await api("/api/mode", {mode: "learn"});
+  const aLanceLearn = currentMode !== "learn";
+  assistant = {actif: true, etapes: d.etapes, i: 0, faites: 0, aLanceLearn: aLanceLearn};
+  if (aLanceLearn) await api("/api/mode", {mode: "learn"});
   await api("/api/learn/clear", {});
   document.getElementById("assistantPanneau").style.display = "";
   document.getElementById("assignForm").style.display = "none";
@@ -80,6 +81,13 @@ async function assistantArreter(fini) {
          : plural("ui.touches.assistant.arrete", assistant.faites);
   document.getElementById("learnHint").textContent = t("ui.touches.hint");
   await api("/api/learn/clear", {});
+  // Fin normale ET annulation passent ici. Le serveur a armé la reprise quand
+  // l'assistant a lancé l'apprentissage bridge actif : on ne sort d'« learn »
+  // (vers « idle », que le serveur convertit en « bridge ») que dans ce cas,
+  // pour ne rien changer au comportement quand l'option est décochée.
+  if (assistant.aLanceLearn && currentRepriseArmee) {
+    await api("/api/mode", {mode: "idle"});
+  }
 }
 
 // ── Learn / assign ────────────────────────────────────────────────────

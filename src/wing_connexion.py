@@ -870,6 +870,10 @@ def _usb_boucle(gen=None):
                 with etat.E.LOCK:
                     if etat.E.STATE["mode"] == "bridge":
                         etat.E.STATE["resume_mode"] = "bridge"
+                    elif etat.E.STATE["mode"] == "learn":
+                        # Pas de reprise fantôme : le « bridge » armé par
+                        # l'apprentissage ne survit pas à un arrachage.
+                        etat.E.STATE["resume_mode"] = None
                 core.log("journal.wing.debranchee")
                 _release_device()
                 # Nouvel épisode de reconnexion : compteur d'escalade remis à

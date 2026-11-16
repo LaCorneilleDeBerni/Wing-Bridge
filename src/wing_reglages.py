@@ -222,7 +222,8 @@ def load_settings():
             # Ces cases sont RELUES au démarrage : un réglage qu'on écrit sans le relire
             # n'est pas un réglage, c'est un bouton sans fil.
             for cle in ("suivre_ma3", "fader_pickup", "verbe_cible",
-                        "encodeurs_ma3", "dmx_local"):
+                        "encodeurs_ma3", "dmx_local",
+                        "reprise_bridge_apres_guide"):
                 if cle in d:
                     core.reglage_poser(**{cle: bool(d[cle])})
             # `plugin_slot` : entier, pas un booléen — bornes 1..9999 (borne

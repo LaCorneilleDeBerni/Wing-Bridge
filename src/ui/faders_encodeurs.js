@@ -26,6 +26,13 @@ async function saveVerbeCible() {
             {actif: document.getElementById("verbeCible").checked});
 }
 
+// Réglage machine (onglet Paramètres) : relancer le bridge après une
+// configuration guidée / un apprentissage lancé bridge actif.
+async function saveRepriseBridge() {
+  await api("/api/reprise_bridge",
+            {actif: document.getElementById("repriseBridge").checked});
+}
+
 function highlightFader(i) {
   hlFader = i;
   document.querySelectorAll(".fader-item").forEach(x => x.classList.remove("hl"));

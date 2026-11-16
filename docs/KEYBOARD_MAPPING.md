@@ -123,6 +123,27 @@ wing_server (utilisateur)        assistant clavier (utilisateur)
 ---
 
 
+## Reprise du bridge après un apprentissage / une configuration guidée
+
+Quand le bridge est actif et qu'on lance l'apprentissage (mode `learn`, dont la
+configuration guidée de l'onglet Touches), le bridge est suspendu pendant la
+capture. Avant, il restait inactif à la fin. Désormais `_post_mode`
+(`wing_handler.py`) arme `STATE["resume_mode"] = "bridge"` quand on passe de
+`bridge` à `learn`, et la sortie de `learn` vers `idle` rebascule en `bridge`
+(même mécanisme que la reprise après un arrachage de câble). Fin normale et
+annulation (« Arrêter ») passent par le même appel, donc la reprise couvre les
+deux. La configuration guidée (`assistantArreter`, `ui/touches.js`) ne quittait
+jamais `learn` toute seule : elle envoie maintenant `idle`, mais seulement si
+c'est elle qui a lancé `learn` et que la reprise est armée (`reprise_armee` dans
+`/api/status`), pour ne rien changer quand l'option est décochée. Garde-fous :
+pas de reprise si la wing est absente à la fin, et `usb_loop` efface
+`resume_mode` si la wing est arrachée pendant `learn` (pas de reprise fantôme au
+rebranchement). L'option est un réglage machine, `reprise_bridge_apres_guide`
+(`settings.json`, cochée par défaut), case « Configuration guidée » de l'onglet
+Paramètres, route `/api/reprise_bridge`. Contrôle : `_reprise_apres_guide`
+dans `smoke_hardware.py` (section 23). Non éprouvé sur une vraie wing : voir
+`docs/ETAT_PROJET.md`.
+
 ## Changement de page + migration des raccourcis
 
 ### Les deux chemins, par un seul token

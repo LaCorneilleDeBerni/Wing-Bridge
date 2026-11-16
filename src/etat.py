@@ -67,6 +67,9 @@ class Etat:
             "suivre_ma3": True,      # suivre la config réelle de MA3 (sonde Lua)
             "fader_pickup": True,    # rattrapage de fader (sonde Lua)
             "verbe_cible": True,     # verbe + executor (Store puis executor)
+            # Bridge actif + apprentissage / configuration guidée : à la fin, le
+            # bridge repart (via `resume_mode`). Défaut TRUE, décochable.
+            "reprise_bridge_apres_guide": True,
             # Défaut FALSE : pilotage de l'Encoder Bar jamais éprouvé sur console.
             "encodeurs_ma3": False,
             # DMX réseau « local uniquement » : défaut FALSE (norme du métier).

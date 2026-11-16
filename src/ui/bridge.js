@@ -39,6 +39,7 @@ async function poll() {
   try {
     const s = await api("/api/status");
     currentMode = s.mode;
+    currentRepriseArmee = !!s.reprise_armee;
 
     // ── Panneau santé (état de la chaîne) ──
     // Cadence réelle de la boucle qui lit la wing. Affichée parce qu'elle
@@ -90,7 +91,8 @@ async function poll() {
     // serveur et la case pilote réellement.
     [["suivreMa3", s.suivre_ma3], ["faderPickup", s.fader_pickup],
      ["ledMa3", s.led_ma3], ["verbeCible", s.verbe_cible],
-     ["suivreEncMa3", s.encodeurs_ma3]].forEach(([id, v]) => {
+     ["suivreEncMa3", s.encodeurs_ma3],
+     ["repriseBridge", s.reprise_bridge_apres_guide]].forEach(([id, v]) => {
       if (v === undefined) return;
       const cb = document.getElementById(id);
       if (cb && document.activeElement !== cb) cb.checked = !!v;
