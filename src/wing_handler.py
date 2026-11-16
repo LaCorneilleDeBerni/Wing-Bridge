@@ -200,6 +200,26 @@ class Handler(BaseHTTPRequestHandler):
     # limite, le journal recevrait une ligne par seconde. Une par route / 30 s.
     _JETON_REFUS_VU = {}
 
+    # 🐛 CORRIGÉ (13/11/2026, Asus) : un refus (403 jeton / origine) partait
+    # AVANT d'avoir lu le corps de la requête. Le serveur fermait alors la
+    # connexion (HTTP/1.0) avec des octets non lus dans son tampon de
+    # réception → la pile TCP envoie un RST au lieu d'un FIN, et le client peut
+    # recevoir « connexion abandonnée » (WinError 10053) AVANT d'avoir lu le
+    # 403. Vu sous Windows au contrôle 69 (1 fois sur 4, jamais sur Mac) ; pour
+    # l'interface réelle, un jeton périmé devenait « moteur injoignable » au
+    # lieu du 403 qui déclenche le rechargement de la page. On vide donc le
+    # corps (borné par CORPS_MAX) avant de répondre. Contrôle test_jeton_api.
+    def _vider_corps(self):
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            return
+        if 0 < length <= self.CORPS_MAX:
+            try:
+                self.rfile.read(length)
+            except OSError:
+                pass
+
     def _refuser_jeton(self):
         import wing_ui as core
         chemin = urllib.parse.urlparse(self.path).path
@@ -208,6 +228,7 @@ class Handler(BaseHTTPRequestHandler):
             Handler._JETON_REFUS_VU[chemin] = maintenant
             core.log("journal.http.jeton_refuse", methode=self.command,
                      chemin=chemin)
+        self._vider_corps()
         self._json({"error": "jeton invalide"}, 403)
 
     def _refuser_origine(self):
@@ -216,6 +237,7 @@ class Handler(BaseHTTPRequestHandler):
         core.log("journal.http.origine_refusee", methode=self.command,
                  chemin=self.path, origin=self.headers.get('Origin', '—'),
                  host=self.headers.get('Host', '—'))
+        self._vider_corps()
         self._json({"error": "origine non autorisée"}, 403)
 
     # ══ TABLES DE ROUTAGE ═══════════════════════════════════════════════════
@@ -306,6 +328,7 @@ class Handler(BaseHTTPRequestHandler):
         ("/api/firmware/export", "_post_firmware_export"),
         ("/api/firmware/capture", "_post_firmware_capture"),
         ("/api/firmware/capture/cancel", "_post_firmware_capture_cancel"),
+        ("/api/firmware/capture/suivant", "_post_firmware_capture_suivant"),
         ("/api/firmware/remove_capture_component", "_post_firmware_remove_capture_component"),
         ("/api/plugin/install", "_post_plugin_install"),
         ("/api/plugin/relaunch", "_post_plugin_relaunch"),
@@ -1468,6 +1491,9 @@ class Handler(BaseHTTPRequestHandler):
                 core.log("journal.fw.capture_ok", o=res['longueur'],
                          residu=res.get('residu', ''))
                 self._relancer_wing_apres_config()
+            elif res.get("annule"):
+                # Annulation VOULUE : pas un échec (chantier F, 16/11/2026).
+                core.log("journal.fw.capture_annulee_utilisateur")
             else:
                 core.log("journal.fw.capture_ko", raison=res.get('raison', '?'))
 
@@ -1494,6 +1520,28 @@ class Handler(BaseHTTPRequestHandler):
         if res.get("annulation"):
             core.log("journal.fw.capture_annulee")
         self._json(res)
+
+    def _post_firmware_capture_suivant(self, body):
+        """Bouton « Suivant » d'un carton de l'assistant de capture.
+
+        Ne décide rien : pose l'événement que `_attendre_suivant()`
+        (wing_firmware_capture) consomme en revérifiant la détection À CET
+        INSTANT — un clic au rouge est ignoré et journalisé côté capture,
+        jamais mis de côté. 409 si aucune capture n'est active ou si
+        l'assistant n'attend pas de clic (partie automatique en cours).
+        Même protection que /cancel : POST, origine et jeton (do_POST).
+        Pas de garde `sys.platform` ici : hors Windows il n'y a jamais de
+        capture active, la réponse est le même 409 — et le test de fumée
+        (section 49) peut l'exercer sur toute plateforme.
+        """
+        try:
+            import wing_firmware_capture as fwc
+        except Exception as e:
+            self._json({"ok": False, "raison": _L("err.module_capture_absent", err=e)})
+            return
+        res = fwc.suivant_capture()
+        code = res.pop("code", 200)
+        self._json(res, code)
 
     def _post_firmware_remove_capture_component(self, body):
         import wing_ui as core

@@ -154,6 +154,19 @@ def connect_wing(force: bool = False, quiet: bool = False,
             with etat.E.LOCK:
                 etat.E.DEV[0] = dev
                 etat.E.STATE["wing"] = True
+                # Poignée NEUVE : les écritures DMX/LED refusées par la
+                # poignée PRÉCÉDENTE ne la concernent plus. Sans cette remise à
+                # zéro, la pastille Bridge gardait « ⚠ 1 écriture refusée
+                # (Errno 19 No such device) » après une capture de firmware,
+                # wing rebranchée et saine (Asus, 12/11/2026), jusqu'au
+                # redémarrage du moteur. Ici et pas dans la boucle : c'est
+                # l'unique chemin de succès (démarrage, bouton, auto-reco,
+                # `_flux_muet`), et aucun `cycle_dmx` ne tourne à cet instant
+                # (usb_loop est en pause, ou c'est lui l'appelant).
+                # `erreurs_tour`/`relances` restent cumulatifs : voulu.
+                # Contrôle test_ecritures_usb_comptees.
+                etat.E.BOUCLE["ecritures_ko"] = 0
+                etat.E.BOUCLE["ecriture_err"] = ""
             etat.E.AUTO["echecs"] = 0
             etat.E.AUTO["interval"] = 2.0            # l'espacement repart à zéro
             etat.E.AUTO["attend_rebranchement"] = False

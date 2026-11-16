@@ -52,7 +52,7 @@ async function fwExport() {
 }
 // Appelée par poll() (bridge.js) à chaque tick : reflète l'état du firmware
 // dans la carte Paramètres et n'affiche « Exporter » qu'une fois en cache.
-function majFirmware(fw) {
+function majFirmware(fw, cap) {
   const etat = document.getElementById("firmwareEtat");
   const btnExport = document.getElementById("fwExportBtn");
   const banner = document.getElementById("firmwareBanner");
@@ -67,7 +67,8 @@ function majFirmware(fw) {
         empreinte: fw.sha256_ok ? t("ui.param.fw.empreinte_ok") : t("ui.param.fw.empreinte_ko") });
       etat.style.color = fw.sha256_ok ? "var(--green)" : "var(--accent)";
     } else {
-      etat.textContent = t("ui.param.fw.aucun");
+      // Windows x64 (cap non null) : on renvoie vers « Capturer », pas vers l'import.
+      etat.textContent = t(cap ? "ui.param.fw.aucun_capture" : "ui.param.fw.aucun");
       etat.style.color = "var(--accent)";
     }
   }
@@ -76,8 +77,9 @@ function majFirmware(fw) {
 // Le gros du travail (élévation, installation/désinstallation éphémère de
 // USBPcap, capture, extraction) est côté serveur (wing_firmware_capture.py) —
 // ce JS ne fait que : afficher l'encart de confirmation, lancer la capture,
-// et refléter sa progression (pollée via /api/status → s.capture, toutes les
-// 400 ms comme le reste du panneau santé, voir ui/init.js).
+// refléter ses 7 cartons (pollés via /api/status → s.capture, toutes les
+// 400 ms comme le reste du panneau santé, voir ui/init.js) et transmettre le
+// clic « Suivant » — sans jamais décider lui-même de l'avancement.
 async function fwCaptureAmorcer() {
   const confirm_ = document.getElementById("fwCaptureConfirm");
   if (confirm_) confirm_.style.display = "";
@@ -97,8 +99,11 @@ async function fwCaptureContinuer() {
   const aig = document.getElementById("fwCaptureAiguillage");
   if (aig) aig.style.display = "none";
   _fwAnnulDemande = false;
+  _fwSuivantMsgFige = false;
   const annMsg = document.getElementById("fwCaptureAnnulerMsg");
   if (annMsg) annMsg.textContent = "";
+  const suivMsg = document.getElementById("fwCaptureSuivantMsg");
+  if (suivMsg) suivMsg.textContent = "";
   let r;
   try { r = await api("/api/firmware/capture", {}); }
   catch (e) { _fwCaptureResultat(t("ui.param.echec_requete"), "err"); return; }
@@ -134,19 +139,163 @@ function _fwCaptureResultat(txt, cls) {
 // capture intégrée entière reste masquée, le repli manuel (.pcapng / .bin) suffit.
 let _fwCaptureActifPrec = false;
 let _fwAnnulDemande = false;     // « Annuler la démarche » cliqué, thread pas fini
-// Construit la barre d'étapes 1/7 … 7/7 : segments verts jusqu'à la phase
-// courante, gris ensuite. Vidée puis reconstruite à chaque poll (bon marché,
-// 7 <div>) — c'est le repère visuel qui rend l'ordre des gestes impossible à
-// rater pendant toute l'opération. `total` vient du serveur (phase_total).
-function _fwCaptureStepbar(phase, total) {
-  const bar = document.getElementById("fwCaptureStepbar");
-  if (!bar) return;
-  bar.textContent = "";
+// ── Les 7 cartons de l'assistant semi-automatique (13/11/2026) ─────────────
+// Décision de l'auteur : plus rien n'avance tout seul. Le serveur
+// (wing_firmware_capture._attendre_suivant) publie dans s.capture le carton
+// courant (`phase`), ses détections (`pastilles`), s'il attend un clic
+// (`attente_utilisateur`) et si ce clic est possible (`suivant_possible`).
+// Ici on ne fait QUE refléter : jamais de décision locale sur l'avancement.
+
+// Décision PURE : le bouton « Suivant » n'est actif que si une capture est
+// active, que le serveur ATTEND un clic et que la détection du carton est
+// verte (suivant_possible). Exécutée telle quelle dans node par le contrôle 49
+// (smoke_firmware.py) ; la réinjection « return true » le fait tomber au rouge.
+function fwSuivantActif(cap) {
+  return !!(cap && cap.actif && cap.attente_utilisateur && cap.suivant_possible);
+}
+
+// État d'un carton i d'après le carton courant `phase` : fait / en cours /
+// à venir — ou « sauté » (fait sans l'avoir été : l'assistant a été interrompu
+// à `interrompu_au` et a filé au retrait d'USBPcap). Pure, testée dans node.
+function fwEtatCarton(i, cap) {
+  const phase = (cap && cap.phase) || 0;
+  if (i === phase) return "en_cours";
+  if (i > phase) return "a_venir";
+  return (cap && cap.interrompu_au && i > cap.interrompu_au) ? "saute" : "fait";
+}
+
+// Décision PURE de l'affichage de l'assistant (chantier F, 16/11/2026), exécutée
+// telle quelle dans node par le contrôle 49. cap = s.capture (null hors Windows
+// x64). `manuelDeplie` : le lien « Repli manuel » a été cliqué.
+//  - modal    : panneau modal « étape N/7 » PENDANT la capture seulement ;
+//  - progress : cartons visibles pendant la capture, et APRÈS un ÉCHEC (pastille
+//    rouge + « Réessayer ») — mais plus après un succès ni une annulation
+//    (avant : le panneau et son « Annuler » restaient jusqu'à F5) ;
+//  - capturer : le bouton « Capturer… » disparaît pendant la capture ;
+//  - manuel   : l'import .pcapng/.bin n'est masqué QUE là où la capture
+//    intégrée existe (cap non null) — ailleurs c'est le seul chemin.
+function fwAffichageCapture(cap, manuelDeplie) {
+  const actif = !!(cap && cap.actif);
+  const echec = !!(cap && !cap.actif && cap.phase && cap.ok === false && !cap.annule);
+  return {
+    bloc: !!cap,
+    modal: actif,
+    progress: actif || echec,
+    capturer: !!cap && !actif,
+    manuel: !cap || !!manuelDeplie,
+    lienManuel: !!cap,
+  };
+}
+let _fwManuelDeplie = false;
+let _fwCaptureDernier = null;
+function fwManuelBasculer() {
+  _fwManuelDeplie = !_fwManuelDeplie;
+  _fwAppliquerManuel(_fwCaptureDernier);
+}
+function _fwAppliquerManuel(cap) {
+  const a = fwAffichageCapture(cap, _fwManuelDeplie);
+  document.querySelectorAll(".fwManuel").forEach(function (el) {
+    el.style.display = a.manuel ? "" : "none";
+  });
+  const lien = document.getElementById("fwManuelLien");
+  if (lien) lien.style.display = a.lienManuel ? "" : "none";
+}
+
+// Rend les 7 cartons : bordure/opacité selon l'état, pastilles et consigne
+// dans le carton EN COURS seulement, et DÉPLACE le bloc d'actions unique
+// (#fwCaptureActions : Suivant / Réessayer / Annuler) dans ce carton — un
+// seul jeu de boutons, jamais deux affichages concurrents. Reconstruit à
+// chaque poll (bon marché : 7 <li>, quelques <div>).
+function _fwCaptureCartons(cap) {
+  const total = cap.phase_total || 7;
+  const couleurPastille = { vert: "var(--green)", rouge: "var(--red)", orange: "var(--accent)" };
+  const libelle = {
+    fait: t("ui.param.fw.carton.fait"),
+    en_cours: t("ui.param.fw.carton.en_cours"),
+    a_venir: t("ui.param.fw.carton.a_venir"),
+    saute: t("ui.param.fw.carton.saute"),
+  };
+  const bordure = { fait: "var(--green)", en_cours: "var(--accent)", a_venir: "var(--border)", saute: "var(--border)" };
+  const actions = document.getElementById("fwCaptureActions");
   for (let i = 1; i <= total; i++) {
-    const seg = document.createElement("div");
-    seg.style.cssText = "flex:1;height:6px;border-radius:3px;background:"
-      + (i <= phase ? "var(--green)" : "var(--border)");
-    bar.appendChild(seg);
+    const li = document.getElementById("fwCarton" + i);
+    if (!li) continue;
+    const st = fwEtatCarton(i, cap);
+    li.style.opacity = st === "a_venir" ? "0.5" : "1";
+    li.style.borderColor = bordure[st];
+    const etat = document.getElementById("fwCartonEtat" + i);
+    if (etat) {
+      etat.textContent = libelle[st];
+      etat.style.color = st === "fait" ? "var(--green)" : st === "en_cours" ? "var(--accent)" : "";
+    }
+    const past = document.getElementById("fwCartonPastilles" + i);
+    if (past) {
+      past.textContent = "";
+      if (st === "en_cours") {
+        (cap.pastilles || []).forEach(function (pst) {
+          const row = document.createElement("div");
+          const dot = document.createElement("span");
+          dot.textContent = "●";
+          dot.style.color = couleurPastille[pst.etat] || "var(--border)";
+          dot.style.marginRight = "6px";
+          row.appendChild(dot);
+          row.appendChild(document.createTextNode(pst.texte || ""));
+          past.appendChild(row);
+        });
+      }
+    }
+    const cons = document.getElementById("fwCartonConsigne" + i);
+    if (cons) {
+      const montrer = st === "en_cours" && !!cap.etape;
+      cons.style.display = montrer ? "" : "none";
+      cons.textContent = montrer ? cap.etape : "";
+    }
+    const slot = document.getElementById("fwCartonActions" + i);
+    if (slot && actions && st === "en_cours" && actions.parentNode !== slot) slot.appendChild(actions);
+  }
+  if (actions) actions.style.display = cap.phase ? "" : "none";
+
+  // « Suivant » : actif UNIQUEMENT sur suivant_possible (fwSuivantActif). Son
+  // libellé dit ce que le clic déclenche (suivant_cle vient du serveur).
+  const btn = document.getElementById("fwCaptureSuivantBtn");
+  if (btn) {
+    btn.style.display = cap.actif ? "" : "none";
+    btn.disabled = !fwSuivantActif(cap);
+    btn.textContent = t(cap.suivant_cle || "firmware.suivant.defaut");
+  }
+  const msg = document.getElementById("fwCaptureSuivantMsg");
+  if (msg && cap.actif && !_fwSuivantMsgFige) {
+    msg.textContent = cap.attente_utilisateur
+      ? t("ui.param.fw.carton.attente_clic") : t("ui.param.fw.carton.automatique");
+    msg.style.color = "";
+  }
+  // « Réessayer » : seulement après un ÉCHEC (pas une annulation, pas un
+  // succès) — il relance la capture, donc repart du carton 1 (nettoyage déjà
+  // fait par la fin propre côté serveur).
+  const re = document.getElementById("fwCaptureReessayerBtn");
+  if (re) re.style.display = (!cap.actif && cap.ok === false && !cap.annule) ? "" : "none";
+}
+let _fwSuivantMsgFige = false;   // un refus du serveur reste affiché jusqu'au prochain clic
+
+// Clic « Suivant » : on ne décide rien ici. La route pose un événement que la
+// boucle de capture consomme en revérifiant la détection à cet instant (un
+// clic au rouge est ignoré et journalisé côté serveur). 409 = rien à valider.
+async function fwCaptureSuivant() {
+  const btn = document.getElementById("fwCaptureSuivantBtn");
+  const msg = document.getElementById("fwCaptureSuivantMsg");
+  if (btn) btn.disabled = true;      // réarmé par le prochain poll (fwSuivantActif)
+  _fwSuivantMsgFige = false;
+  let r;
+  try { r = await api("/api/firmware/capture/suivant", {}); }
+  catch (e) {
+    if (msg) { msg.textContent = t("ui.param.fw.suivant_echec_requete"); msg.style.color = "var(--red)"; }
+    _fwSuivantMsgFige = true;
+    return;
+  }
+  if (!(r && r.ok) && msg) {
+    msg.textContent = t("ui.param.fw.suivant_refuse", { raison: (r && r.raison) || "?" });
+    msg.style.color = "var(--red)";
+    _fwSuivantMsgFige = true;
   }
 }
 // Pastilles A–E de la phase de mise en route (post-firmware) — voir le
@@ -172,25 +321,38 @@ function _mercWizStepbar(states) {
 }
 
 function majCapture(cap) {
+  _fwCaptureDernier = cap || null;
+  const aff = fwAffichageCapture(cap, _fwManuelDeplie);
   const bloc = document.getElementById("fwCaptureBloc");
-  if (bloc) bloc.style.display = cap ? "" : "none";
-  if (!cap) return;
+  if (bloc) bloc.style.display = aff.bloc ? "" : "none";
+  _fwAppliquerManuel(cap);
+  if (!cap) {
+    const fond0 = document.getElementById("fwCaptureFond");
+    if (fond0) fond0.classList.remove("ouvert");
+    return;
+  }
 
   const btn = document.getElementById("fwCaptureBtn");
   const progress = document.getElementById("fwCaptureProgress");
-  const etape = document.getElementById("fwCaptureEtape");
-  const titre = document.getElementById("fwCaptureTitre");
   const removeBtn = document.getElementById("fwRemoveCaptureBtn");
 
-  const total = cap.phase_total || 5;
-  const phase = cap.phase || 0;
-
-  if (btn) btn.disabled = !!cap.actif;
-  if (progress) progress.style.display = cap.actif ? "" : "none";
-  if (etape) etape.textContent = cap.etape || "…";
-  if (titre) titre.textContent = phase
-    ? t("ui.param.fw.progress.titre", { phase: phase, total: total }) + (cap.phase_titre || "") : "";
-  _fwCaptureStepbar(phase, total);
+  if (btn) { btn.disabled = !!cap.actif; btn.style.display = aff.capturer ? "" : "none"; }
+  // Les cartons restent visibles APRÈS la fin (succès, échec, annulation) :
+  // c'est là que vivent la pastille rouge qui dit pourquoi et « Réessayer ».
+  // Masqués seulement tant qu'aucune capture n'a commencé (phase 0).
+  if (progress) {
+    progress.style.display = aff.progress ? "" : "none";
+    progress.classList.toggle("fwModal", aff.modal);
+  }
+  const fond = document.getElementById("fwCaptureFond");
+  if (fond) fond.classList.toggle("ouvert", aff.modal);
+  const titre = document.getElementById("fwModalTitre");
+  if (titre) {
+    titre.style.display = aff.modal ? "" : "none";
+    titre.textContent = aff.modal
+      ? t("ui.param.fw.modal.titre", { n: cap.phase || 1, total: cap.phase_total || 7 }) : "";
+  }
+  _fwCaptureCartons(cap);
   if (removeBtn) removeBtn.style.display = cap.bouton_secours ? "" : "none";
 
   // Bouton « Annuler la démarche » : actif tout du long de la capture. Après
@@ -199,6 +361,7 @@ function majCapture(cap) {
   const annBtn = document.getElementById("fwCaptureAnnulerBtn");
   if (annBtn && !_fwAnnulDemande) {
     annBtn.disabled = !cap.actif;
+    annBtn.style.display = cap.actif ? "" : "none";   // plus d'« Annuler » une fois fini
     annBtn.textContent = t("ui.param.fw.progress.annuler_demarche");
   }
 

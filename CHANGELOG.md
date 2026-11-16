@@ -9,6 +9,82 @@ the project aims for [semantic versioning](https://semver.org/).
 
 _Nothing yet._
 
+## [1.0.2] — 2026-11-16
+
+Build **#254** on both platforms. Windows verified on 2026-11-16 on a real PC
+with a wing and grandMA3 onPC: integrated firmware capture end to end in the
+new 7-card guided flow (identical firmware, USBPcap removed), refused-write
+warning, firmware indicator, cancel. macOS: same source, 83-control smoke test.
+Highlight: **the firmware capture assistant is now guided** — one card per
+step, you press “Next”, and nothing automatic starts before you do.
+
+### Changed
+
+- **Firmware capture assistant is now semi-automatic: 7 cards confirmed by
+  you.** The two known failures (Dell, Asus 2026-11-12) came from an assistant
+  that moved on by itself on a false or premature detection. Each card now
+  shows its detection dots (green / red / orange) and waits for a **Next**
+  click, enabled only when the detections are green; the automatic parts
+  (Windows permission + USBPcap install, extraction, USBPcap removal) only
+  start on that click, and a click arriving while a detection is red is
+  ignored and logged. Timeouts are safety nets behind the click, not
+  drivers. Not yet tested on a Windows machine.
+- **Capture assistant, UI pass after the first real test (Windows x64).** The
+  assistant now opens as a modal panel ("Step N/7") over a blurred page while
+  it runs; the "Capture from grandMA2 onPC" button is hidden during the
+  capture; the panel closes by itself after a success or a cancel (it used to
+  stay, Cancel included, until F5) and stays only after a failure (red dot +
+  Retry). The manual .pcapng/.bin import is tucked behind a discreet "Manual
+  fallback" link where the integrated capture exists; on macOS/Linux it stays
+  visible, being the only path. "Firmware not configured" messages point to
+  "Capture" on Windows x64, to the import elsewhere. Only one accented
+  (yellow) button per step. Not yet tested on a Windows machine.
+- Help and diagnostic texts about grandMA3's OSC page no longer say just
+  “`Interface` ≠ `<None>`”: `Interface` must be consistent with `Preferred IP`
+  and the destination (local MA3: `lo0 (127.0.0.1)` + `127.0.0.0/8` +
+  `127.0.0.1`), and an output line must not share port 8000. Seen on
+  2026-11-12: `en0` + `127.0.0.0/8` opened no port at all, with no message.
+
+### Fixed
+
+- Disabled buttons now look disabled (a general `.btn:disabled` rule: greyed,
+  no hover): "Next" was blocked but still plain yellow. A deliberate cancel of
+  the firmware capture is now logged as "cancelled by the user", not as a
+  failure.
+- A request refused for a bad API token or a foreign Origin was answered
+  (403) **before its body was read**, so the server closed the connection with
+  unread bytes and the client could see “connection aborted” (WinError 10053)
+  instead of the 403 — seen on Windows, 1 time in 4, in the smoke test; in the
+  real interface a stale token became “engine unreachable” instead of the
+  page reload the 403 triggers. The body is now drained before refusing.
+- **Firmware capture, step 2 (“Unplug your wing”) could move on without an
+  unplug**: a single “not on the bus” sample was taken as an unplug, while a
+  wing re-enumerating (firmware pushed by grandMA2 onPC) or rebooting in
+  bootloader drops off the bus by itself for a moment. The step now requires
+  the wing to be absent for 5 s in a row (the same threshold the USB loop
+  uses), and step 1 now says to unplug the wing **before** launching grandMA2
+  onPC. Not yet tested on a Windows machine.
+- Firmware capture log no longer says “no usable transfer — stopping the
+  capture” right before a successful extraction; the “no transfer” failure
+  message now names the likely cause first (wing not unplugged / transfer
+  before the recording started), and “Wing in bootloader … unplug” now says
+  the wing may still finish starting on its own (~30 s) before asking to
+  unplug. Text only.
+- The Bridge dot's “N DMX/LED write(s) refused by the wing” warning was never
+  reset: after a firmware capture it kept showing `[Errno 19] No such device`
+  while the wing was back and healthy, until the engine was restarted (known
+  issue of 1.0.1). The counter and its last error are now cleared on every
+  successful (re)connection, on the same path that logs “Wing connected”.
+- **“Wing USB” indicator and Bridge banner lied when no firmware file was
+  imported but the wing was running** (firmware kept in RAM by its power-only
+  USB plug; seen on 2026-11-12 on Windows: 30 Hz loop, “operational … no
+  reset”, yet “the wing can't start until a firmware is imported”). Both now
+  look at the wing's real state: connected → “running on the firmware kept in
+  its memory, import one before the next unplug or restart”; not connected →
+  the “can't start” alert is kept. Display only, no change to the connection
+  logic. Guarded by smoke check 23 (f), which runs the decision in node for
+  both states.
+
 ## [1.0.1] — 2026-11-12
 
 Maintenance release: same features as 1.0.0, 15 fixes from a full code audit,

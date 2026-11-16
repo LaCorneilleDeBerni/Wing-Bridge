@@ -229,6 +229,24 @@ button.btn.primary:hover { filter: brightness(1.1); }
 button.btn.danger { color: var(--red); }
 button.btn.green { background: var(--green); color: #14171c; border: none; }
 button.btn.big { font-size: 15px; padding: 12px 24px; }
+/* Bouton inactif : grisé, curseur interdit, aucun survol (chantier F, 16/11/2026 :
+   « Suivant » bloqué mais resté jaune plein). Placé APRÈS .primary/.green pour
+   l'emporter sur leur fond ; vaut pour tous les boutons .btn désactivés. */
+button.btn:disabled, button.btn:disabled:hover {
+  opacity: .4; cursor: not-allowed; filter: grayscale(.85);
+  border-color: var(--border);
+}
+button.btn.primary:disabled, button.btn.green:disabled { border: none; }
+/* Assistant de capture en PANNEAU MODAL (Windows x64) : seul élément actif,
+   fond flou. Les classes sont posées par majCapture() (ui/parametres.js) ;
+   le MÊME #fwCaptureProgress sert au modal et à l'affichage d'après-échec. */
+.fwFond { position: fixed; inset: 0; z-index: 800; display: none;
+  background: rgba(8,10,13,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.fwFond.ouvert { display: block; }
+#fwCaptureProgress.fwModal { position: fixed; z-index: 801; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); width: min(760px, 94vw); max-height: 92vh;
+  overflow-y: auto; margin: 0; padding: 18px; background: var(--card);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
 
 input[type=text], input[type=number], select {
   background: var(--bg); color: var(--text);
@@ -422,13 +440,18 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
   </div>
   <!-- ⚠️ Bandeau « firmware non configuré » — masqué tant qu'un firmware est
        disponible (cache ou blob livré). poll() (bridge.js) le montre/cache
-       selon s.firmware.configure. Sans firmware, la wing ne peut pas démarrer :
-       le bouton renvoie vers « Paramètres → Configurer le firmware ». -->
+       selon s.firmware.configure, et choisit le TEXTE du span #fwBanniereTxt
+       via clesFirmwareManquant(s) : « ne peut pas démarrer » SEULEMENT si la
+       wing n'est pas connectée ; si elle tourne (firmware gardé en RAM par sa
+       prise d'alimentation — Asus, 12/11/2026), on dit qu'il faut importer
+       AVANT le prochain débranchement. data-i18n-dynamic : c'est poll() qui
+       écrit le texte, pas appliquerLangue(). Le bouton renvoie vers
+       « Paramètres → Configurer le firmware ». -->
   <div id="firmwareBanner" style="display:none; padding:12px 20px;
        background:rgba(255,180,0,.14); border:1px solid var(--accent);
        border-radius:8px; font-size:13px; line-height:1.6; margin-bottom:16px">
     <b style="color:var(--accent)" data-i18n="ui.bridge.fw_banniere.titre">⚠️ Firmware non configuré</b>
-    <span class="muted" data-i18n="ui.bridge.fw_banniere.txt">— la wing ne peut pas démarrer tant qu'aucun firmware
+    <span class="muted" id="fwBanniereTxt" data-i18n="ui.bridge.fw_banniere.txt" data-i18n-dynamic>— la wing ne peut pas démarrer tant qu'aucun firmware
       n'a été importé.</span>
     <button class="btn primary" style="margin-left:10px"
             onclick="allerConfigurerFirmware()" data-i18n="ui.bridge.fw_banniere.bouton">Configurer le firmware</button>
@@ -1136,23 +1159,29 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
         le firmware, puis le <b>désinstalle</b>. Une invite Windows demandera
         la permission.
         <br><br>
-        <b>Tu seras guidé pas à pas (7 étapes)</b>, chacune se débloque toute
-        seule : lancer grandMA2 onPC → débrancher la wing → (installation) →
-        brancher la wing → <b>fermer grandMA2 onPC</b> → débrancher la wing
-        (retrait de USBPcap) → rebrancher la wing → Wing Bridge reprend la
-        main. <b>Compte 2 à 4 min</b>, et pendant ce temps la wing va
-        s'éteindre/se rallumer plusieurs fois — c'est normal, <b>ne branche /
-        débranche rien tant que l'assistant ne te le demande pas</b>.</span>
+        <b>Tu seras guidé par 7 cartons</b>, et rien ne part sans ton clic
+        « Suivant » (actif seulement quand les détections du carton sont
+        vertes) : préparation (wing débranchée + grandMA2 onPC lancé) →
+        autorisation Windows et installation d'USBPcap → brancher la wing
+        (capture) → <b>fermer grandMA2 onPC</b> → débrancher la wing → retrait
+        d'USBPcap → rebrancher la wing → Wing Bridge reprend la main.
+        <b>Compte 3 à 5 min</b>, et pendant ce temps la wing va s'éteindre/se
+        rallumer plusieurs fois — c'est normal, <b>ne branche / débranche rien
+        tant que le carton en cours ne te le demande pas</b>.</span>
         <div class="toolbar" style="margin-top:8px">
           <button class="btn primary" onclick="fwCaptureContinuer()" data-i18n="ui.param.fw.confirm.continuer">Continuer</button>
           <button class="btn" onclick="fwCaptureAnnuler()" data-i18n="ui.param.fw.confirm.annuler">Annuler</button>
         </div>
       </div>
-      <!-- Assistant pas à pas pendant la capture (~2 à 4 min, installation
-           USBPcap comprise). Barre d'étapes + titre + consigne courante :
-           tout est alimenté par majCapture() depuis /api/status
-           (s.capture.phase / phase_titre / etape). -->
+      <!-- Assistant à cartons pendant la capture (~3 à 5 min, installation
+           USBPcap comprise). Les 7 cartons ci-dessous sont alimentés par
+           majCapture() → _fwCaptureCartons() depuis /api/status (s.capture :
+           phase, pastilles, etape, suivant_possible, suivant_cle). -->
+      <div id="fwCaptureFond" class="fwFond"></div>
       <div id="fwCaptureProgress" style="display:none;font-size:13px;margin-top:8px">
+        <!-- Titre du modal « Étape N/7 » : écrit par majCapture() (data-i18n-dynamic),
+             vide hors modal. -->
+        <div id="fwModalTitre" style="display:none;font-size:16px;font-weight:700;margin-bottom:10px" data-i18n="ui.param.fw.modal.titre" data-i18n-dynamic>Étape {n}/{total}</div>
         <!-- Consigne n°1, en gros : l'opération dure 2-4 min et la wing
              s'éteint/rallume plusieurs fois (ré-énumérations + nettoyage
              USBPcap). L'envie de débrancher pendant ces phases a été signalée
@@ -1160,28 +1189,107 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
              branchement/débranchement (4, 6) : la règle est « seulement quand
              c'est demandé ». -->
         <div style="font-weight:800;font-size:14px;padding:10px 12px;border-radius:8px;
-             margin-bottom:8px;background:var(--accent);color:#fff;text-align:center" data-i18n-html="ui.param.fw.progress.avertissement">
-          ⚠️ Ne branche / débranche la wing QUE quand l'étape ci-dessous te le demande.<br>
-          <span style="font-weight:600">Entre-temps elle va s'éteindre et se rallumer plusieurs fois — c'est normal, laisse faire (2 à 4 min).</span>
+             margin-bottom:8px;background:var(--card2);border:1px solid var(--accent);color:var(--text);text-align:center" data-i18n-html="ui.param.fw.progress.avertissement">
+          ⚠️ Ne branche / débranche la wing QUE quand le carton en cours te le demande.<br>
+          <span style="font-weight:600">Entre-temps elle va s'éteindre et se rallumer plusieurs fois — c'est normal, laisse faire (3 à 5 min).</span>
         </div>
-        <div id="fwCaptureStepbar" style="display:flex;gap:4px;margin-bottom:8px"></div>
-        <div id="fwCaptureTitre" style="font-weight:700;margin-bottom:4px;font-size:14px"></div>
-        <div id="fwCaptureEtape"
-             style="padding:8px 10px;border-radius:8px;background:var(--card2);font-weight:600"></div>
+        <!-- Les 7 CARTONS de l'assistant semi-automatique (décision de l'auteur,
+             13/11/2026 : plus rien n'avance tout seul). Un carton par geste ;
+             états « fait / en cours / à venir / sauté » posés par
+             _fwCaptureCartons() (ui/parametres.js) depuis s.capture.phase ;
+             pastilles (s.capture.pastilles : 🟢 détecté · 🔴 pas détecté ·
+             🟠 avertissement) et consigne (s.capture.etape) remplies dans le
+             carton EN COURS seulement. Le bloc d'actions #fwCaptureActions
+             (Suivant / Réessayer / Annuler) est DÉPLACÉ dans le carton en cours
+             à chaque poll : un seul jeu de boutons, jamais deux affichages
+             concurrents (l'ancienne barre 1/7…7/7, _fwCaptureStepbar, est
+             retirée). « Suivant » n'est actif que si le serveur dit
+             suivant_possible (fwSuivantActif) — c'est lui, et lui seul, qui
+             lance la partie automatique suivante. Titres statiques (data-i18n,
+             fr.json fait foi) ; le libellé de « Suivant » dit ce que le clic
+             DÉCLENCHE (data-i18n-dynamic : c'est majCapture() qui l'écrit). -->
+        <ol id="fwCaptureCartons" style="list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px">
+          <li id="fwCarton1" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2)">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+              <b><span>1 ·</span> <span data-i18n="firmware.phase.1.titre">Préparation : wing débranchée, grandMA2 onPC lancé</span></b>
+              <span class="muted" id="fwCartonEtat1" style="font-size:11.5px;white-space:nowrap"></span>
+            </div>
+            <div id="fwCartonPastilles1" style="margin-top:4px;line-height:1.7"></div>
+            <div id="fwCartonConsigne1" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--card);font-weight:600"></div>
+            <div id="fwCartonActions1"></div>
+          </li>
+          <li id="fwCarton2" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2)">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+              <b><span>2 ·</span> <span data-i18n="firmware.phase.2.titre">Autorisation Windows et installation d'USBPcap</span></b>
+              <span class="muted" id="fwCartonEtat2" style="font-size:11.5px;white-space:nowrap"></span>
+            </div>
+            <div id="fwCartonPastilles2" style="margin-top:4px;line-height:1.7"></div>
+            <div id="fwCartonConsigne2" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--card);font-weight:600"></div>
+            <div id="fwCartonActions2"></div>
+          </li>
+          <li id="fwCarton3" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2)">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+              <b><span>3 ·</span> <span data-i18n="firmware.phase.3.titre">Branche ta wing — puis ne la débranche plus</span></b>
+              <span class="muted" id="fwCartonEtat3" style="font-size:11.5px;white-space:nowrap"></span>
+            </div>
+            <div id="fwCartonPastilles3" style="margin-top:4px;line-height:1.7"></div>
+            <div id="fwCartonConsigne3" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--card);font-weight:600"></div>
+            <div id="fwCartonActions3"></div>
+          </li>
+          <li id="fwCarton4" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2)">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+              <b><span>4 ·</span> <span data-i18n="firmware.phase.4.titre">Ferme grandMA2 onPC</span></b>
+              <span class="muted" id="fwCartonEtat4" style="font-size:11.5px;white-space:nowrap"></span>
+            </div>
+            <div id="fwCartonPastilles4" style="margin-top:4px;line-height:1.7"></div>
+            <div id="fwCartonConsigne4" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--card);font-weight:600"></div>
+            <div id="fwCartonActions4"></div>
+          </li>
+          <li id="fwCarton5" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2)">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+              <b><span>5 ·</span> <span data-i18n="firmware.phase.5.titre">Débranche ta wing</span></b>
+              <span class="muted" id="fwCartonEtat5" style="font-size:11.5px;white-space:nowrap"></span>
+            </div>
+            <div id="fwCartonPastilles5" style="margin-top:4px;line-height:1.7"></div>
+            <div id="fwCartonConsigne5" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--card);font-weight:600"></div>
+            <div id="fwCartonActions5"></div>
+          </li>
+          <li id="fwCarton6" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2)">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+              <b><span>6 ·</span> <span data-i18n="firmware.phase.6.titre">Retrait d'USBPcap</span></b>
+              <span class="muted" id="fwCartonEtat6" style="font-size:11.5px;white-space:nowrap"></span>
+            </div>
+            <div id="fwCartonPastilles6" style="margin-top:4px;line-height:1.7"></div>
+            <div id="fwCartonConsigne6" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--card);font-weight:600"></div>
+            <div id="fwCartonActions6"></div>
+          </li>
+          <li id="fwCarton7" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2)">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+              <b><span>7 ·</span> <span data-i18n="firmware.phase.7.titre">Rebranche ta wing</span></b>
+              <span class="muted" id="fwCartonEtat7" style="font-size:11.5px;white-space:nowrap"></span>
+            </div>
+            <div id="fwCartonPastilles7" style="margin-top:4px;line-height:1.7"></div>
+            <div id="fwCartonConsigne7" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--card);font-weight:600"></div>
+            <div id="fwCartonActions7"></div>
+          </li>
+        </ol>
+        <div id="fwCaptureActions" style="display:none">
+          <div class="toolbar" style="margin-top:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn primary" id="fwCaptureSuivantBtn" onclick="fwCaptureSuivant()" disabled data-i18n="firmware.suivant.defaut" data-i18n-dynamic>Suivant →</button>
+            <button class="btn" id="fwCaptureReessayerBtn" onclick="fwCaptureContinuer()" style="display:none" data-i18n="ui.param.fw.reessayer">↻ Réessayer (reprendre au carton 1)</button>
+            <!-- Annuler la démarche : dispo TOUT DU LONG. Ne tue rien de force —
+                 pose un drapeau ; si USBPcap est déjà installé, la boucle le retire
+                 avant de rendre la main (wing_firmware_capture.annuler_capture). -->
+            <button class="btn" id="fwCaptureAnnulerBtn" onclick="fwCaptureAnnulerDemarche()"
+                    style="font-size:12px;padding:4px 10px" data-i18n="ui.param.fw.progress.annuler_demarche">⏹ Annuler la démarche</button>
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:4px">
+            <span id="fwCaptureSuivantMsg"></span>
+            <span id="fwCaptureAnnulerMsg"></span>
+          </div>
+        </div>
         <div class="muted" style="margin-top:6px" data-i18n="ui.param.fw.progress.note">
-          7 étapes, chacune se débloque toute seule dès que l'action est faite —
-          rien à cliquer. Les étapes 5 (fermer grandMA2 onPC), 6 (débrancher la
-          wing, le temps du retrait de USBPcap) et 7 (rebrancher) sont
-          indispensables : sans elles Wing Bridge ne peut pas reprendre la wing
-          et le composant de capture resterait installé.
-        </div>
-        <!-- Annuler la démarche : dispo TOUT DU LONG. Ne tue rien de force —
-             pose un drapeau ; si USBPcap est déjà installé, la boucle le retire
-             avant de rendre la main (wing_firmware_capture.annuler_capture). -->
-        <div class="toolbar" style="margin-top:8px">
-          <button class="btn" id="fwCaptureAnnulerBtn" onclick="fwCaptureAnnulerDemarche()"
-                  style="font-size:12px;padding:4px 10px" data-i18n="ui.param.fw.progress.annuler_demarche">⏹ Annuler la démarche</button>
-          <span class="muted" id="fwCaptureAnnulerMsg" style="font-size:12px"></span>
+          Rien ne part tout seul : chaque carton attend ton clic « Suivant », actif seulement quand ses pastilles sont vertes (🟢 détecté · 🔴 pas détecté · 🟠 avertissement, ne bloque pas). « Annuler la démarche » reste possible à tout moment ; après un échec, « Réessayer » repart au carton 1. Les cartons 4 (fermer grandMA2 onPC), 5 (débrancher la wing) et 7 (rebrancher) sont indispensables : sans eux Wing Bridge ne peut pas reprendre la wing et le composant de capture resterait installé.
         </div>
       </div>
       <div id="fwCaptureResultat" style="display:none;font-size:13px;margin-top:8px"></div>
@@ -1237,7 +1345,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       </div>
     </div>
 
-    <details class="help" id="hFirmware"><summary data-i18n="ui.param.fw.hrepli.summary">Repli manuel (Wireshark) — ou une autre plateforme</summary>
+    <details class="help fwManuel" id="hFirmware"><summary data-i18n="ui.param.fw.hrepli.summary">Repli manuel (Wireshark) — ou une autre plateforme</summary>
     <div class="hbody" data-i18n-html="ui.param.fw.hrepli.body">
       Sur un PC <b>Windows x64</b> : installe Wireshark (il propose USBPcap),
       lance la capture sur l'interface <b>USBPcapN</b> du hub où sera la wing,
@@ -1249,9 +1357,14 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       le <code>.bin</code>, puis « 📄 Importer un firmware (.bin) » ici.
       Détail : docs/HARDWARE.md.
     </div></details>
+    <!-- Import MANUEL (.pcapng / .bin) : « trop geek » sur Windows x64 → masqué
+         par défaut là (s.capture non null) derrière le lien discret « Repli
+         manuel ». Sur macOS/Linux (s.capture null) c'est le SEUL chemin : il
+         reste affiché, lien masqué (fwAffichageCapture, ui/parametres.js). -->
     <div class="toolbar">
-      <button class="btn" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
-      <button class="btn" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
+      <button class="btn fwManuel" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
+      <button class="btn fwManuel" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
+      <a href="#" id="fwManuelLien" class="muted" style="display:none;font-size:12px" onclick="fwManuelBasculer(); return false;" data-i18n="ui.param.fw.manuel_lien">Repli manuel</a>
       <button class="btn" id="fwExportBtn" onclick="fwExport()" style="display:none" data-i18n="ui.param.fw.export_btn">💾 Exporter le firmware</button>
       <span class="muted" id="fwMsg" style="font-size:12.5px"></span>
     </div>
@@ -1271,7 +1384,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
 
     <!-- Repère de progression de la mise en route (Étapes A → E) — EN LETTRES,
          pas en chiffres : la capture Windows au-dessus a déjà sa propre barre
-         numérotée (1..7, _fwCaptureStepbar) pour une séquence DIFFÉRENTE et
+         numérotée (cartons 1..7, _fwCaptureCartons) pour une séquence DIFFÉRENTE et
          PLUS LONGUE sur PC ; réutiliser des chiffres ici aurait laissé croire
          à la continuité d'une même série alors que Mac saute direct à cette
          phase. Cette phase-ci (A-E) est identique sur Mac et sur Windows —
@@ -1310,7 +1423,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       <div class="toolbar" style="margin-top:6px">
         <span id="oscEtapeEtat" style="font-weight:700"></span>
       </div>
-      <div data-i18n-html="ui.param.fw.osc_etape_txt"><ol style="margin:6px 0 0 20px;padding:0"><li><b>Interface</b> ≠ <code>&lt;None&gt;</code></li><li><b>Enable Input</b> activé</li><li>Ligne <b>Port</b> = 8000 : <b>Receive</b> et <b>Receive Command</b> = Yes</li></ol></div>
+      <div data-i18n-html="ui.param.fw.osc_etape_txt"><ol style="margin:6px 0 0 20px;padding:0"><li><b>Interface</b> cohérent avec <b>Preferred IP</b> (MA3 sur cette machine : <code>lo0 (127.0.0.1)</code> + <code>127.0.0.0/8</code>), jamais <code>&lt;None&gt;</code></li><li><b>Enable Input</b> activé</li><li>Ligne <b>Port</b> = 8000 : <b>Receive</b> et <b>Receive Command</b> = Yes</li></ol></div>
     </div>
 
     <!-- Étape B de la mise en route : INSTALLER le plugin grandMA3. Affichée

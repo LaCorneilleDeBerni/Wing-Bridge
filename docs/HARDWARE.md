@@ -678,6 +678,22 @@ logicielle sans nouvelle preuve.**
 re-énumère et perd son firmware (qui vit en RAM) : elle revient en bootloader.**
 `🔄` y échappe parce qu'`os.execv` ne tue pas le process.
 
+⚠️ **Le firmware en RAM survit tant que la wing reste ALIMENTÉE** — observé sur
+l'Asus (Windows) le 12/11/2026 : aucun fichier firmware importé dans l'app
+(`firmware.configure=False`), et pourtant la wing répondait « operational …
+no reset » et tournait à 30 Hz, parce que sa prise USB d'alimentation seule
+n'avait pas été débranchée ; tout débranché → « firmware NOT CONFIGURED ».
+Conséquence côté interface (corrigé, chantier D) : la pastille « Wing USB » et
+le bandeau de l'onglet Bridge ne disent plus « la wing ne peut pas démarrer »
+quand elle est connectée (`STATE["wing"]` vrai) ; ils disent qu'elle tourne sur
+le firmware gardé en mémoire et qu'il faut l'importer **avant le prochain
+débranchement**. L'alerte « ne peut pas démarrer » reste réservée à la wing
+absente. Contrôle `test_boutons_honnetes` (f). Ce que ça dit du « chien de
+garde » ci-dessous n'est **pas tranché** : cette observation est côté Windows,
+avec la prise d'alimentation maintenue — elle ne contredit pas la chute mesurée
+sur Mac quand la poignée USB est rendue, elle montre seulement que le critère
+« alimentation coupée » est celui qui fait foi pour perdre la RAM.
+
 ### Ce n'est PAS réparable en changeant la sortie
 
 `restart_self()` appelle le **même** `arreter_usb()` (`release_interface` +
