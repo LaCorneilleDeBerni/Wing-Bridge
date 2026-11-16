@@ -34,7 +34,8 @@ const AIDES_PAR_ONGLET = [
   ["ui.nav.bridge", ["demarrage", "suivreMa3", "faderPickup", "ledMa3",
                       "verbeCible", "usbArrache", "plugin"]],
   ["ui.nav.touches", ["modeApprentissage", "modeGuide", "raccourcis", "accessibilite", "conflitRaccourci"]],
-  ["ui.nav.encodeurs", ["suivreEncMa3"]],
+  ["ui.nav.faders", ["typesFaders", "rangeeFaders"]],
+  ["ui.nav.encodeurs", ["suivreEncMa3", "rouesEncodeurs", "nomAttribut"]],
 ];
 
 // Liste plate, pour que aide(cle) puisse refuser une rubrique inconnue SANS

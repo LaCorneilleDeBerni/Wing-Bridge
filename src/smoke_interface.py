@@ -624,12 +624,52 @@ def test_aides_completes(html):
             for tr in interdits:
                 if tr in txt:
                     pb.append(f"{cle} ({lang}) contient {tr}")
+    # Onglets Faders et Encodeurs : plus d'encart d'introduction, tout passe par
+    # un « ? » (même bouton, même fenêtre que l'onglet Touches).
+    attendus = {"typesFaders": "tab-faders", "rangeeFaders": "tab-faders",
+                "rouesEncodeurs": "tab-encodeurs", "nomAttribut": "tab-encodeurs"}
+    for sujet, onglet in attendus.items():
+        if sujet not in definies:
+            pb.append(f"rubrique {sujet} absente d'AIDES_PAR_ONGLET")
+        if f"aide.{sujet}.court" not in fr or f"aide.{sujet}.court" not in en:
+            pb.append(f"aide.{sujet}.court manque (fr ou en)")
+        i = html.find(f'<section id="{onglet}">')
+        j = html.find("</section>", i)
+        if i < 0 or f"aide('{sujet}')" not in html[i:j]:
+            pb.append(f"aucun « ? » aide('{sujet}') dans l'onglet {onglet}")
+    for ancien in ("ui.faders.intro", "ui.encodeurs.intro", "ui.faders.hrangee",
+                   'id="hRangee"', "ui.encodeurs.hattr.body"):
+        if ancien in html or any(k.startswith(ancien) for k in list(fr) + list(en)):
+            pb.append(f"{ancien} est revenu (encart d'introduction ou <details> "
+                      f"remplacé par un « ? »)")
+    for sec in ("tab-faders", "tab-encodeurs"):
+        i = html.find(f'<section id="{sec}">')
+        j = html.find("</section>", i)
+        if i >= 0 and 'class="intro"' in html[i:j]:
+            pb.append(f"un encart class=\"intro\" est revenu dans {sec}")
+    # Lien « Plus de détails » : couleurs du thème, ni bleu de navigateur ni
+    # soulignement par défaut (aucun lien bleu souligné ailleurs dans l'app).
+    regles = _re.findall(r"\.aide-plus a\s*\{([^}]*)\}", html)
+    if not regles:
+        pb.append("aucune règle CSS « .aide-plus a » (lien bleu souligné par défaut)")
+    else:
+        base = regles[0].replace(" ", "")
+        if "text-decoration:none" not in base:
+            pb.append("« .aide-plus a » doit avoir text-decoration:none")
+        if "color:var(--muted)" not in base:
+            pb.append("« .aide-plus a » doit être en var(--muted)")
+        if any("underline" in r.replace(" ", "") for r in regles):
+            pb.append("« .aide-plus a » : text-decoration:underline")
+        if _re.search(r"color:\s*(#|rgb|blue)", regles[0]):
+            pb.append("« .aide-plus a » : couleur en dur au lieu du thème")
     if pb:
         echec(f"{len(pb)} défaut(s) sur la version courte / les chiffres de la carte Raccourcis",
               " ; ".join(pb[:8]))
     else:
         ok(f"{len(courts)} rubrique(s) à version courte (< 500 car., fr + en) "
-           f"avec lien vers l'Aide ; carte Raccourcis sans compteur de touches")
+           f"avec lien vers l'Aide ; carte Raccourcis sans compteur de touches ; "
+           f"Faders/Encodeurs sans encart, « ? » en place, lien d'aide aux "
+           f"couleurs du thème")
 
 
 def test_reglages_sappliquent(html):

@@ -170,7 +170,15 @@ header h1 .ver { color: var(--muted); font-size: 12px; font-weight: 400; }
   color: var(--muted); font-size: 13.5px; cursor: pointer; }
 
 .modale .aide-plus { padding: 0 22px 16px; font-size: 13px; }
+/* Lien discret, comme le reste de l'app : couleur du texte secondaire, accent au
+   survol, ni soulignement ni bleu de navigateur. */
+.modale .aide-plus a { color: var(--muted); text-decoration: none; cursor: pointer; }
+.modale .aide-plus a:hover, .modale .aide-plus a:focus-visible { color: var(--accent); }
 .modale .aide-plus[hidden] { display: none; }
+/* Aucun lien bleu souligné dans l'app : le lien « Repli manuel » du panneau
+   firmware prend le même style discret que « Plus de détails dans l'Aide ». */
+#fwManuelLien { color: var(--muted); text-decoration: none; cursor: pointer; }
+#fwManuelLien:hover, #fwManuelLien:focus-visible { color: var(--accent); }
 button.aide {
   background: none; border: 1px solid var(--border); color: var(--muted);
   width: 19px; height: 19px; border-radius: 50%; cursor: pointer;
@@ -678,21 +686,8 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
 
 <!-- ═══ FADERS ═══ -->
 <section id="tab-faders">
-  <div class="intro" data-i18n-html="ui.faders.intro">
-    <span class="t">🎚️ Faders — vers les masters MA3</span>
-    Choisis pour chaque fader physique le <b>type</b> à piloter — calqué sur la
-    liste <b>Select Function</b> que MA3 propose pour la propriété Fader d'un
-    executor (Menu Executor → Fader). <b>Le détail des types est listé plus
-    bas</b>, avec la commande exactement envoyée.<br>
-    <b style="color:var(--accent)">⚠️ Le type choisi ici DOIT correspondre à la fonction
-    réellement réglée sur cet executor dans MA3</b> (Menu Executor → Fader →
-    Select Function, ou <code>Set Page X.N Property "Fader" &lt;Fonction&gt;</code>).
-    L'OSC ne voit pas ce que tu as configuré côté MA3 — c'est la commande qu'on
-    envoie qui décide, donc les deux réglages doivent être les mêmes.<br>
-    Astuce : active l'apprentissage et bouge un fader pour repérer son n° d'octet.
-  </div>
   <div class="card">
-    <h2><span data-i18n="ui.faders.grille.titre">Faders → Masters MA3</span> <span class="muted" data-i18n="ui.faders.grille.titre_hint" style="text-transform:none">(active le mode apprentissage et bouge un fader pour l'identifier)</span></h2>
+    <h2><span data-i18n="ui.faders.grille.titre">Faders → Masters MA3</span> <button class="aide" onclick="aide('typesFaders')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button> <span class="muted" data-i18n="ui.faders.grille.titre_hint" style="text-transform:none">(active le mode apprentissage et bouge un fader pour l'identifier)</span></h2>
     <div class="toolbar" style="margin-bottom:12px">
       <span class="muted" data-i18n="ui.faders.rang.label">Remplir une rangée : à partir du fader</span>
       <input type="number" id="rangDepuis" class="small" min="1" value="3" style="width:56px">
@@ -700,23 +695,9 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       <input type="number" id="rangBase" class="small" min="1" value="201" style="width:70px">
       <span class="muted" data-i18n="ui.faders.rang.suite">et à la suite</span>
       <button class="btn" onclick="remplirRangee()" data-i18n="ui.faders.rang.appliquer">Appliquer</button>
+      <button class="aide" onclick="aide('rangeeFaders')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
       <span class="muted" id="rangMsg"></span>
     </div>
-    <details class="help" id="hRangee"><summary data-i18n="ui.faders.hrangee.summary">Comment ça marche, et pourquoi la page suit toute seule</summary>
-    <div class="hbody" data-i18n-html="ui.faders.hrangee.body">
-      Dans grandMA3, <b>toutes les pages ont la même disposition</b> : une
-      rangée 101→110, une autre 201→210, etc. Et un numéro d'executor est
-      toujours <b>relatif à la page courante</b> — <code>Executor 206</code>
-      désigne le 206 de la page affichée.
-      <br><br>
-      Conséquence : tu renseignes la rangée <b>une seule fois</b>, et changer
-      de page suit tout seul. Rien à retoucher.
-      <br><br>
-      L'<b>étiquette</b> à gauche de chaque fader est là pour coller à la
-      sérigraphie de ta wing (<i>Master, XFade, 1, 2…</i>). Elle ne change rien
-      à ce qui est envoyé : c'est pour t'y retrouver, les command wings MA2
-      n'ayant pas toutes le même nombre de faders ni la même disposition.
-    </div></details>
     <div class="fader-grid" id="faderGrid"></div>
   </div>
 
@@ -730,14 +711,6 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
 
 <!-- ═══ ENCODEURS ═══ -->
 <section id="tab-encodeurs">
-  <div class="intro" data-i18n-html="ui.encodeurs.intro">
-    <span class="t">🎡 Encodeurs — les 4 roues</span>
-    Chaque roue contrôle un attribut des fixtures sélectionnées dans MA3
-    (Dimmer, Pan, Tilt, couleur…). Un <b>clic sur une roue</b> réassigne les 4
-    roues d'un coup (comme un groupe d'attributs) ; un <b>double-clic</b> en
-    active un second jeu — 8 groupes au total, configurés ici de la même
-    façon.
-  </div>
   <div class="card">
     <!-- La case « suivre l'Encoder Bar », retirée une fois (elle ne basculait
          rien), est RÉINTRODUITE : cette fois elle pilote réellement — voir
@@ -752,28 +725,11 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       <span class="muted" data-i18n="ui.encodeurs.ma3_montre_plugin">Nécessite le plugin MA3.</span>
     </div>
     <div id="encMa3Etat" class="muted" style="margin:6px 0"></div>
-    <h2><span data-i18n="ui.encodeurs.groupes.titre">Groupes d'attributs</span> <span class="muted" data-i18n="ui.encodeurs.groupes.titre_hint" style="text-transform:none">(clic roue N → groupe N, double-clic roue N → groupe N+4)</span></h2>
-    <details class="help warn" id="hEncAttr">
-      <summary data-i18n="ui.encodeurs.hattr.summary">Une roue ne fait rien ? C'est le nom de l'attribut</summary>
-      <div class="hbody" data-i18n-html="ui.encodeurs.hattr.body">
-        Le nom à écrire ici est le nom <b>interne</b> de l'attribut MA3, et
-        <b>pas le libellé affiché sur l'Encoder Bar</b>. Les deux se ressemblent
-        assez pour tromper :
-        <ul style="margin:8px 0 8px 18px">
-          <li>Encoder Bar « Focus » → écrire <b>Focus1</b></li>
-          <li>Encoder Bar « Sh1 » → écrire <b>Shutter1</b></li>
-          <li>Encoder Bar « Dim » → écrire <b>Dimmer</b></li>
-          <li>Encoder Bar « P » / « T » → écrire <b>Pan</b> / <b>Tilt</b></li>
-        </ul>
-        Un nom inexistant <b>échoue en silence</b> : Wing Bridge envoie la
-        commande sans erreur, et c'est MA3 qui refuse — sur <i>sa</i> ligne de
-        commande, avec <b>illegal object</b>. Rien n'apparaît dans le journal de
-        l'app. Si une roue semble morte, regarde la ligne de commande de MA3.
-        <br><br>
-        Tu n'as pas à les deviner : <b>la liste complète est juste en dessous</b>,
-        et les cases proposent les noms au fur et à mesure que tu tapes.
-      </div>
-    </details>
+    <h2><span data-i18n="ui.encodeurs.groupes.titre">Groupes d'attributs</span> <button class="aide" onclick="aide('rouesEncodeurs')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button> <span class="muted" data-i18n="ui.encodeurs.groupes.titre_hint" style="text-transform:none">(clic roue N → groupe N, double-clic roue N → groupe N+4)</span></h2>
+    <div class="reglage muted" id="hEncAttr" style="margin-bottom:10px">
+      <span data-i18n="ui.encodeurs.hattr.summary">Une roue ne fait rien ? C'est le nom de l'attribut</span>
+      <button class="aide" onclick="aide('nomAttribut')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
+    </div>
     <div id="encGroups"></div>
     <div class="toolbar" style="margin-top:14px">
       <label class="muted"><span data-i18n="ui.encodeurs.groupe_demarrage">Groupe au démarrage :</span>
@@ -1729,7 +1685,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
     <div class="corps" id="aideCorps"></div>
     <!-- Lien vers la page Aide : visible seulement quand la fenêtre affiche la
          version COURTE d'une rubrique (clé aide.<sujet>.court). -->
-    <div class="aide-plus" id="aidePlus" hidden><a href="#" onclick="aideVoirPlus(); return false" data-i18n="ui.modale.aide.plus">Plus de détails dans l'Aide</a></div>
+    <div class="aide-plus" id="aidePlus" hidden><a href="#" onclick="aideVoirPlus(); return false" data-i18n="ui.modale.aide.plus">Plus de détails dans l'Aide →</a></div>
   </div>
 </div>
 

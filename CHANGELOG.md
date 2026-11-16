@@ -14,6 +14,10 @@ the project aims for [semantic versioning](https://semver.org/).
   messages. The “?” windows of this tab (shortcuts, Accessibility, shortcut
   conflict) now show a short summary with a “More details in Help” link that
   opens the matching section of the Help page, where the full text lives.
+- Faders and Encoders tabs: the large introduction boxes and the two collapsible
+  help blocks are gone. Their text now lives behind a “?” button (short summary
+  plus a “More details in Help” link to the Help page). The link itself now uses
+  the app's muted colors instead of the default underlined blue.
 - Keys tab: the long introduction block (which described the app's former
   behaviour) is gone. Each mode (learning, guided setup) now has a small “?”
   button that unfolds a short summary of what it does.
