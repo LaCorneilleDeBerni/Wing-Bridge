@@ -634,3 +634,39 @@ rien modifier dans le profil. La renumérotation d'une rangée d'executors
 `wing_boutons.renumeroter_rangee` : l'ordre physique est conservé et l'appelant
 tient `etat.E.LOCK`. Ces deux fonctions sont sorties de `wing_handler.py`
 (audit du 25/09/2026, D3). Contrôle `test_validation_entrees`.
+
+## Assistant de mise en route unique : carton « Raccourcis clavier » (16/11/2026, passage 2a)
+
+Le carton 5 de l'assistant unique (`cartonsMiseEnRoute`, `ui/parametres.js`)
+reprend l'ancienne étape D du fil A-E, **sans changer le comportement** :
+
+- **Détection** (pure, exécutée dans node par le contrôle 6a/6g) : vert
+  seulement si `s.shcuts_horodate` (dernier envoi réussi, persisté sur disque)
+  ET l'Accessibilité de Wing Keyboard est accordée (`console.trusted`, ou
+  `console.windows` : sous Windows rien à autoriser). Rouge sinon, avec trois
+  textes distincts : jamais envoyés, assistant clavier introuvable,
+  Accessibilité non accordée.
+- **Action** : « Envoyer les raccourcis vers grandMA3 » appelle
+  `shcutsEnvoyer()` (`ui/touches.js`), le même envoi que l'onglet Touches et
+  que l'ancienne étape D (attente de la preuve de la sonde, rien d'annoncé sans
+  vérification). Le message vit dans `#mrShcutsEtat`, fixe : la liste de cartons
+  est reconstruite à chaque poll, un message dans le carton serait effacé.
+- **« ? »** : rubrique `raccourcis` (ou `accessibilite` quand c'est
+  l'Accessibilité qui manque).
+- **Non vérifié, écrit comme tel** : l'activation de ShCuts dans grandMA3
+  (bouton clavier au bout de la ligne de commande). L'app ne la détecte pas ;
+  la note du carton le dit. `shcuts_horodate` prouve un envoi, pas que ShCuts
+  est actif.
+
+Le carton 6 « Sauvegarde et démarrage » (ancienne étape E) : vert si
+`s.mode === "bridge"`. « Sauvegarder la configuration » réemploie
+`sauvegarderConfigWizard("mrMsg")` (donc `saveActiveProfile()`) ; la
+sauvegarde elle-même n'est pas détectable, le bouton est proposé, jamais
+exigé. « Démarrer le bridge » ferme la fenêtre (elle vit dans l'onglet
+Paramètres) puis appelle `allerDemarrerBridge()`, comme l'ancien bouton.
+« Terminer » reste grisé tant que le bridge ne tourne pas ; « Fermer » reste
+disponible.
+
+Contrôle : `_controle_mise_en_route` (6a, 6d, 6c, 6g), `smoke_firmware.py`.
+Réinjections vues rouges : Accessibilité ignorée, bridge toujours « démarré »,
+envoi sans `shcutsEnvoyer`, clé anglaise absente.

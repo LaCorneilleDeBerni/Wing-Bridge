@@ -18,6 +18,13 @@ the project aims for [semantic versioning](https://semver.org/).
   `.pcapng` imports. The Check card starts the existing guided setup and can
   be skipped (orange). After a successful capture the assistant opens instead
   of the old where-will-you-use-it question. The old A-E steps stay for now.
+- Setup assistant (second pass, part 1): two more cards after Check. “Keyboard
+  shortcuts” is green only when the shortcuts were sent to grandMA3 and the
+  keyboard helper has the Accessibility permission (not needed on Windows); its
+  button is the same send as the Keys tab. A note says that turning ShCuts on in
+  grandMA3 cannot be checked by the app. “Save and start” is green when the
+  bridge is running; it offers “Save the configuration” and “Start the bridge”.
+  The old A-E steps are still there.
 
 ### Changed
 

@@ -1216,5 +1216,17 @@
   "ui.mr.verif.orange": "Check postponed. You can do it whenever you want.",
   "ui.mr.verif.rouge": "The wing has not been checked yet. The guided setup takes you through each tab.",
   "ui.mr.verif.lancer": "Start the guided setup",
-  "ui.mr.verif.passer": "Skip this step"
+  "ui.mr.verif.passer": "Skip this step",
+  "ui.mr.raccourcis.titre": "Keyboard shortcuts",
+  "ui.mr.demarrage.titre": "Save and start",
+  "ui.mr.rac.vert": "The shortcuts have already been sent to grandMA3.",
+  "ui.mr.rac.rouge_envoi": "The shortcuts have not been sent to grandMA3 yet.",
+  "ui.mr.rac.rouge_acces": "The shortcuts were sent, but macOS has not yet allowed Wing Keyboard (Accessibility): without it, the keystrokes do not arrive.",
+  "ui.mr.rac.rouge_clavier": "The keyboard helper (Wing Keyboard) cannot be found. Restart the app.",
+  "ui.mr.rac.shcuts": "In grandMA3, ShCuts must be turned on (keyboard button at the end of the command line). The app cannot check it.",
+  "ui.mr.rac.envoyer": "Send the shortcuts to grandMA3",
+  "ui.mr.demarrage.vert": "The bridge is running.",
+  "ui.mr.demarrage.rouge": "The bridge is not started yet. Save your configuration, then start it.",
+  "ui.mr.demarrage.sauvegarder": "Save the configuration",
+  "ui.mr.demarrage.demarrer": "Start the bridge"
 }

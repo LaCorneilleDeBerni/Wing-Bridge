@@ -314,8 +314,9 @@ async function fwCaptureSuivant() {
 // pastilles vert / rouge / orange, « Suivant » actif seulement quand le carton
 // courant est en place. Chaque étape s'affiche TOUJOURS : verte « déjà en
 // place » si c'est fait, rouge avec l'action pour la faire sinon — jamais
-// sautée en silence. Passage 1 : Firmware, OSC, Plugin, Vérification (les
-// Raccourcis et le démarrage restent dans l'ancien fil A-E, retiré au passage 2).
+// sautée en silence. Cartons : Firmware, OSC, Plugin, Vérification (passage 1),
+// puis Raccourcis clavier et Sauvegarde / Démarrage (passage 2a). L'ancien fil
+// A-E reste en place, il sera retiré au passage 2b.
 //
 // Tout le calcul est dans des fonctions PURES (detectionsMiseEnRoute,
 // plateformeMiseEnRoute, cartonsMiseEnRoute, mrSuivantActif), exécutées telles
@@ -414,7 +415,45 @@ function cartonsMiseEnRoute(s, plateforme, local) {
       [{ id: "config_guidee", cle: "ui.mr.verif.lancer" },
        { id: "passer", cle: "ui.mr.verif.passer" }], false);
   }
-  return [fw, osc, plugin, verif];
+
+  // Raccourcis clavier (ancienne étape D) : même détection que l'ancien fil —
+  // shcuts_horodate (dernier envoi RÉUSSI, persisté sur disque) et
+  // l'Accessibilité de Wing Keyboard (console.trusted ; sous Windows,
+  // console.windows la rend sans objet). ShCuts actif dans grandMA3 n'est PAS
+  // détecté par l'app : la note le dit, rien n'est affirmé.
+  const cons = s.console || {};
+  const accesOk = !!(cons.windows || cons.trusted);
+  let rac;
+  if (!s.shcuts_horodate) {
+    rac = carton("raccourcis", "rouge", "ui.mr.rac.rouge_envoi",
+      [{ id: "envoyer_raccourcis", cle: "ui.mr.rac.envoyer" }], false);
+    rac.aideSujet = "raccourcis";
+  } else if (!cons.windows && !cons.enabled) {
+    rac = carton("raccourcis", "rouge", "ui.mr.rac.rouge_clavier",
+      [{ id: "envoyer_raccourcis", cle: "ui.mr.rac.envoyer" }], false);
+    rac.aideSujet = "accessibilite";
+  } else if (!accesOk) {
+    rac = carton("raccourcis", "rouge", "ui.mr.rac.rouge_acces",
+      [{ id: "envoyer_raccourcis", cle: "ui.mr.rac.envoyer" }], false);
+    rac.aideSujet = "accessibilite";
+  } else {
+    rac = carton("raccourcis", "vert", "ui.mr.rac.vert",
+      [{ id: "envoyer_raccourcis", cle: "ui.mr.rac.envoyer" }], true);
+    rac.aideSujet = "raccourcis";
+  }
+  rac.note = "ui.mr.rac.shcuts";
+
+  // Sauvegarde / Démarrage (ancienne étape E) : le bridge tourne-t-il
+  // (s.mode === "bridge", comme majParametresGma3) ? La sauvegarde, elle, ne
+  // se détecte pas : le bouton est proposé, jamais exigé.
+  const demarre = s.mode === "bridge";
+  const dem = demarre
+    ? carton("demarrage", "vert", "ui.mr.demarrage.vert",
+        [{ id: "sauvegarder", cle: "ui.mr.demarrage.sauvegarder" }], true)
+    : carton("demarrage", "rouge", "ui.mr.demarrage.rouge",
+        [{ id: "sauvegarder", cle: "ui.mr.demarrage.sauvegarder" },
+         { id: "demarrer", cle: "ui.mr.demarrage.demarrer" }], false);
+  return [fw, osc, plugin, verif, rac, dem];
 }
 
 // « Suivant » : actif seulement si le carton est en place (vert), ou orange
@@ -460,6 +499,8 @@ function assistantMiseEnRouteFermer() {
 function _mrMsgVider() {
   const el = document.getElementById("mrMsg");
   if (el) el.textContent = "";
+  const sh = document.getElementById("mrShcutsEtat");
+  if (sh) sh.textContent = "";
 }
 
 // Appelée par poll() via majParametresGma3 : mémorise l'état et réaffiche si
@@ -553,6 +594,13 @@ function assistantMiseEnRouteRendre() {
         avert.textContent = t(c.note);
         li.appendChild(avert);
       }
+      if (c.id === "raccourcis") {
+        const avert = document.createElement("div");
+        avert.className = "muted";
+        avert.style.cssText = "margin-top:4px;font-size:12.5px";
+        avert.textContent = t(c.note);
+        li.appendChild(avert);
+      }
       if (c.actions.length) {
         const bar = document.createElement("div");
         bar.className = "toolbar";
@@ -564,6 +612,14 @@ function assistantMiseEnRouteRendre() {
           btn.onclick = function () { _mrAction(a.id); };
           bar.appendChild(btn);
         });
+        if (c.aideSujet) {
+          const aideBtn = document.createElement("button");
+          aideBtn.className = "aide";
+          aideBtn.textContent = "?";
+          aideBtn.title = t("ui.commun.en_savoir_plus");
+          aideBtn.onclick = function () { aide(c.aideSujet); };
+          bar.appendChild(aideBtn);
+        }
         li.appendChild(bar);
       }
     }
@@ -605,6 +661,21 @@ async function _mrInstallerPlugin() {
   return pluginInstaller("mrMsg");
 }
 
+// Envoi des raccourcis : MÊME appel que le bouton de l'onglet Touches et que
+// l'ancienne étape D (shcutsEnvoyer, ui/touches.js, qui attend la preuve de la
+// sonde avant d'annoncer quoi que ce soit). Le message vit dans #mrShcutsEtat,
+// fixe (la liste de cartons est reconstruite à chaque poll) ; #mrShcutsBtn
+// est un bouton caché, fixe lui aussi, que shcutsEnvoyer() grise pendant
+// l'envoi (le bouton visible du carton, reconstruit, est gardé par
+// _mrEnvoiEnCours).
+let _mrEnvoiEnCours = false;
+async function _mrEnvoyerRaccourcis() {
+  if (_mrEnvoiEnCours) return;
+  _mrEnvoiEnCours = true;
+  try { await shcutsEnvoyer("mrShcutsBtn", "mrShcutsEtat"); }
+  finally { _mrEnvoiEnCours = false; }
+}
+
 // Les actions REPRENNENT les fonctions existantes, rien n'est réécrit ici.
 function _mrAction(id) {
   if (id === "capturer") {
@@ -621,6 +692,15 @@ function _mrAction(id) {
   else if (id === "aide_osc") aide("demarrage");
   else if (id === "installer_plugin") _mrInstallerPlugin();
   else if (id === "relancer_plugin") _relancerPlugin("mrMsg", null);
+  else if (id === "envoyer_raccourcis") _mrEnvoyerRaccourcis();
+  else if (id === "sauvegarder") sauvegarderConfigWizard("mrMsg");
+  else if (id === "demarrer") {
+    // Le bridge se démarre depuis l'onglet Bridge : la fenêtre (dans l'onglet
+    // Paramètres) se referme, comme pour « Capturer ». Même geste que l'ancien
+    // bouton « Démarrer le bridge » (allerDemarrerBridge).
+    assistantMiseEnRouteFermer();
+    allerDemarrerBridge();
+  }
   else if (id === "config_guidee") {
     assistantMiseEnRouteFermer();
     _mrRouvrirApresGuide = true;
@@ -963,8 +1043,8 @@ function configGuideeTerminer() {
 // « 💾 Enregistrer » de l'en-tête, aucune logique dupliquée), avec un retour
 // affiché sur place plutôt que de faire remonter l'utilisateur voir le point
 // « modifié » de l'en-tête.
-async function sauvegarderConfigWizard() {
-  const msg = document.getElementById("sauvegardeWizardMsg");
+async function sauvegarderConfigWizard(msgId) {
+  const msg = document.getElementById(msgId || "sauvegardeWizardMsg");
   if (msg) { msg.textContent = t("ui.param.guide.sauvegarde_en_cours"); msg.style.color = ""; }
   try {
     await saveActiveProfile();

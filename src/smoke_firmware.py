@@ -726,7 +726,12 @@ def _controle_mise_en_route():
       (c) audit de source : l'assistant réutilise fwImportBin, fwImportCapture,
           fwCaptureAmorcer, pluginInstaller, configGuideeDemarrer ; aucun
           auto-skip (pas d'avance sans clic « Suivant ») ;
-      (d) toutes les clés du carton existent en fr ET en en.
+      (d) toutes les clés du carton existent en fr ET en en ;
+      (g) passage 2a : les cartons Raccourcis clavier et Sauvegarde / Démarrage
+          — pastille = détection réelle (shcuts_horodate + Accessibilité de
+          Wing Keyboard ; s.mode === "bridge"), jamais verts sans elle, et leurs
+          actions réemploient shcutsEnvoyer / sauvegarderConfigWizard /
+          allerDemarrerBridge de l'ancien fil A-E.
     """
     import json
     import re as _re
@@ -793,13 +798,20 @@ const ma3 = (ok) => ({actif: ok, entree: true, port_attendu: 8000,
 const R = [];
 for (const fw of [false, true]) for (const win of [false, true])
 for (const osc of [false, true]) for (const plug of [false, true])
-for (const verif of ["rouge", "passee", "faite"]) {
+for (const verif of ["rouge", "passee", "faite"])
+for (const envoye of [false, true])
+for (const acces of ["ok", "ko", "windows", "absent"])
+for (const bridge of [false, true]) {
   const s = {firmware: {configure: fw}, capture: win ? {actif: false} : null,
              osc: {reachable: osc ? "ok" : "off", ma3: osc && plug ? ma3(true) : null},
-             sonde: {present: plug, actif: plug}};
+             sonde: {present: plug, actif: plug},
+             shcuts_horodate: envoye ? 1700000000 : null,
+             console: {enabled: acces !== "absent", trusted: acces === "ok" || acces === "windows",
+                       windows: acces === "windows"},
+             mode: bridge ? "bridge" : "idle"};
   const c = cartonsMiseEnRoute(s, plateformeMiseEnRoute(s),
     {verifFaite: verif === "faite", verifPassee: verif === "passee"});
-  R.push({fw, win, osc, plug, verif, plateforme: plateformeMiseEnRoute(s),
+  R.push({fw, win, osc, plug, verif, envoye, acces, bridge, plateforme: plateformeMiseEnRoute(s),
           cartons: c, suivants: c.map(mrSuivantActif)});
 }
 process.stdout.write(JSON.stringify(R));
@@ -809,15 +821,34 @@ process.stdout.write(JSON.stringify(R));
         echec("(6) cartonsMiseEnRoute a planté dans node", r.stderr[:300])
         return
     cas = json.loads(r.stdout)
-    attendu_ids = ["firmware", "osc", "plugin", "verification"]
+    attendu_ids = ["firmware", "osc", "plugin", "verification", "raccourcis", "demarrage"]
     cles = set()
     for c in cas:
-        etiq = {k: c[k] for k in ("fw", "win", "osc", "plug", "verif")}
+        etiq = {k: c[k] for k in ("fw", "win", "osc", "plug", "verif", "envoye", "acces", "bridge")}
         ids = [x["id"] for x in c["cartons"]]
         if ids != attendu_ids:
             echec("(6a) une étape manque ou change d'ordre dans la liste", f"{etiq} → {ids}")
             return
-        fw, osc, plug, verif = c["cartons"]
+        fw, osc, plug, verif, rac, dem = c["cartons"]
+        # (6g) Raccourcis : vert SEULEMENT si envoyés ET Accessibilité accordée
+        # (ou Windows) ; Démarrage : vert SEULEMENT si le bridge tourne.
+        rac_ok = c["envoye"] and c["acces"] in ("ok", "windows")
+        if (rac["pastille"] == "vert") != rac_ok:
+            echec("(6g) carton Raccourcis : pastille incohérente avec la détection "
+                  "(envoi + Accessibilité)", f"{etiq} → {rac['pastille']}")
+            return
+        if (dem["pastille"] == "vert") != c["bridge"]:
+            echec("(6g) carton Démarrage : pastille incohérente avec l'état du bridge",
+                  f"{etiq} → {dem['pastille']}")
+            return
+        if [a["id"] for a in rac["actions"]] != ["envoyer_raccourcis"] or rac.get("note") != "ui.mr.rac.shcuts" \
+                or rac.get("aideSujet") not in ("raccourcis", "accessibilite"):
+            echec("(6g) carton Raccourcis : action d'envoi, note ShCuts ou « ? » manquants", f"{etiq} {rac}")
+            return
+        cles.add(rac["note"])
+        if [a["id"] for a in dem["actions"]] != (["sauvegarder"] if c["bridge"] else ["sauvegarder", "demarrer"]):
+            echec("(6g) carton Démarrage : actions Sauvegarder / Démarrer incohérentes", f"{etiq} {dem}")
+            return
         for x, sv in zip(c["cartons"], c["suivants"]):
             cles.add(x["texte"])
             cles.update(a["cle"] for a in x["actions"])
@@ -844,7 +875,7 @@ process.stdout.write(JSON.stringify(R));
             if sv != (x["pastille"] in ("vert", "orange")):
                 echec("(6a) « Suivant » incohérent avec la pastille", f"{etiq} {x['id']}")
                 return
-            if x["pastille"] == "rouge" and not x["actions"] and x["id"] in ("firmware", "verification"):
+            if x["pastille"] == "rouge" and not x["actions"] and x["id"] in ("firmware", "verification", "raccourcis", "demarrage"):
                 echec("(6a) carton rouge sans action pour le faire", f"{etiq} {x['id']}")
                 return
             if x["pastille"] == "orange" and x["id"] != "verification":
@@ -873,9 +904,11 @@ process.stdout.write(JSON.stringify(R));
     if manquantes:
         echec("(6d) clés de l'assistant de mise en route absentes en fr/en", ", ".join(manquantes))
         return
-    ok(f"(6a) cartonsMiseEnRoute ({len(cas)} combinaisons dans node) : 4 cartons toujours "
+    ok(f"(6a) cartonsMiseEnRoute ({len(cas)} combinaisons dans node) : 6 cartons toujours "
        "listés, pastille = détection, « Suivant » au vert (ou orange de la vérification) seulement")
     ok("(6b) carton Firmware : capture sous Windows, import .bin / .pcapng ailleurs")
+    ok("(6g) cartons Raccourcis (envoi + Accessibilité) et Démarrage (bridge qui tourne) : "
+       "vert seulement si la détection le dit, note ShCuts « non vérifiable » et « ? » présents")
     ok("(6d) toutes les clés de l'assistant existent en fr et en en")
 
     # (f) audit de source du champ d'emplacement dans le carton Plugin : rendu
@@ -923,8 +956,18 @@ process.stdout.write(JSON.stringify(R));
         echec("(6f) _mrInstallerPlugin doit enregistrer l'emplacement (savePluginSlot) "
               "AVANT d'appeler pluginInstaller")
         return
+    m_env = _re.search(r"^async function _mrEnvoyerRaccourcis\(\) \{.*?^\}", js, _re.S | _re.M)
+    if not m_env or 'shcutsEnvoyer("mrShcutsBtn", "mrShcutsEtat")' not in m_env.group(0):
+        echec("(6g) _mrEnvoyerRaccourcis doit appeler shcutsEnvoyer (même envoi que l'ancienne étape D)")
+        return
+    for _id in ("mrShcutsEtat", "mrShcutsBtn"):
+        if f'id="{_id}"' not in (HERE / "wing_ui.html").read_text(encoding="utf-8"):
+            echec(f"(6g) #{_id} absent de wing_ui.html (message / bouton fixes de l'envoi)")
+            return
     manque = [f for f in ("fwImportBin(", "fwImportCapture(", "fwCaptureAmorcer(",
-                          "_mrInstallerPlugin(", "configGuideeDemarrer(", "fwExport(")
+                          "_mrInstallerPlugin(", "configGuideeDemarrer(", "fwExport(",
+                          "_mrEnvoyerRaccourcis(", 'sauvegarderConfigWizard("mrMsg")',
+                          "allerDemarrerBridge(")
               if f not in m_act.group(0)]
     if manque:
         echec("(6c) l'assistant ne réutilise pas les fonctions existantes", ", ".join(manque))

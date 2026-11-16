@@ -1216,5 +1216,17 @@
   "ui.mr.verif.orange": "Vérification remise à plus tard. Tu peux la faire quand tu veux.",
   "ui.mr.verif.rouge": "La wing n'a pas encore été vérifiée. La configuration guidée te fait passer sur chaque onglet.",
   "ui.mr.verif.lancer": "Lancer la configuration guidée",
-  "ui.mr.verif.passer": "Passer cette étape"
+  "ui.mr.verif.passer": "Passer cette étape",
+  "ui.mr.raccourcis.titre": "Raccourcis clavier",
+  "ui.mr.demarrage.titre": "Sauvegarde et démarrage",
+  "ui.mr.rac.vert": "Les raccourcis ont déjà été envoyés vers grandMA3.",
+  "ui.mr.rac.rouge_envoi": "Les raccourcis n'ont pas encore été envoyés vers grandMA3.",
+  "ui.mr.rac.rouge_acces": "Les raccourcis ont été envoyés, mais macOS n'a pas encore autorisé Wing Keyboard (Accessibilité) : sans cela, les frappes n'arrivent pas.",
+  "ui.mr.rac.rouge_clavier": "L'assistant clavier (Wing Keyboard) est introuvable. Relance l'app.",
+  "ui.mr.rac.shcuts": "Dans grandMA3, ShCuts doit être activé (bouton clavier au bout de la ligne de commande). L'app ne peut pas le vérifier.",
+  "ui.mr.rac.envoyer": "Envoyer les raccourcis vers grandMA3",
+  "ui.mr.demarrage.vert": "Le bridge tourne.",
+  "ui.mr.demarrage.rouge": "Le bridge n'est pas encore démarré. Sauvegarde ta configuration, puis démarre-le.",
+  "ui.mr.demarrage.sauvegarder": "Sauvegarder la configuration",
+  "ui.mr.demarrage.demarrer": "Démarrer le bridge"
 }
