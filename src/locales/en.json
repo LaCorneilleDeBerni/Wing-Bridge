@@ -849,7 +849,7 @@
   "err.ma3.copie_ko": "copying files to grandMA3 failed ({err}). Install the plugin by hand (procedure in the grandMA3 card).",
   "err.ma3.osc_ko_install": "sending OSC “{cmd}” failed ({err}). Check that MA3 is listening for OSC (Receive Command = Yes), or install the plugin by hand.",
   "err.ma3.plugin_installe": "plugin installed — the probe responds.",
-  "err.ma3.sonde_muette_install": "the commands went out but the probe isn't responding yet. Most likely cause: Plugin slot {slot} was already taken and MA3 opened an Overwrite/Merge/Cancel dialog that's still open — close it (choose Overwrite) then try again. Other possible causes: “Receive Command” not set to Yes in MA3, or the show wasn't saved. You can also change the location in Settings → 🎛️ grandMA3. Finish by hand with the procedure in the grandMA3 card.",
+  "err.ma3.sonde_muette_install": "the commands went out but the probe isn't responding yet. Possible causes (check in grandMA3): the plugin isn't enabled (Enable); an Overwrite/Merge/Cancel dialog was left open because Plugin slot {slot} was already taken — close it (Overwrite) then try again; “Receive Command” isn't set to Yes; the show isn't saved. You can also change the location in Settings → 🎛️ grandMA3. This message disappears as soon as the probe responds.",
   "err.profil_pas_un_profil": "this file isn't a profile",
   "err.profil_json_pas_wb": "valid JSON, but this isn't a Wing Bridge profile (no buttons, faders, or console_keys)",
   "err.nom_reserve": "reserved name",

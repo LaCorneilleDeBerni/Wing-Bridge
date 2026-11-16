@@ -850,7 +850,7 @@
   "err.ma3.copie_ko": "copie des fichiers vers grandMA3 impossible ({err}). Installe le plugin à la main (procédure dans la carte grandMA3).",
   "err.ma3.osc_ko_install": "envoi OSC « {cmd} » impossible ({err}). Vérifie que MA3 écoute l'OSC (Receive Command = Yes), ou installe le plugin à la main.",
   "err.ma3.plugin_installe": "plugin installé — la sonde répond.",
-  "err.ma3.sonde_muette_install": "les commandes sont parties mais la sonde ne répond pas encore. Cause la plus probable : le slot Plugin {slot} était déjà occupé et MA3 a ouvert un dialogue Overwrite/Merge/Cancel resté ouvert — ferme-le (choisis Overwrite) puis réessaie. Autres causes possibles : « Receive Command » pas sur Yes dans MA3, ou show non enregistré. Tu peux aussi changer l'emplacement dans Paramètres → 🎛️ grandMA3. Termine à la main avec la procédure de la carte grandMA3.",
+  "err.ma3.sonde_muette_install": "les commandes sont parties mais la sonde ne répond pas encore. Causes possibles (à vérifier dans grandMA3) : le plugin n'est pas activé (Enable) ; un dialogue Overwrite/Merge/Cancel est resté ouvert parce que le slot Plugin {slot} était déjà pris — ferme-le (Overwrite) puis réessaie ; « Receive Command » n'est pas sur Yes ; le show n'est pas enregistré. Tu peux aussi changer l'emplacement dans Paramètres → 🎛️ grandMA3. Ce message disparaît dès que la sonde répond.",
   "err.profil_pas_un_profil": "ce fichier n'est pas un profil",
   "err.profil_json_pas_wb": "JSON valide, mais ce n'est pas un profil Wing Bridge (ni buttons, ni faders, ni console_keys)",
   "err.nom_reserve": "nom réservé",

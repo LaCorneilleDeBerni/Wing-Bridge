@@ -1296,6 +1296,13 @@ async function pluginSlotInstaller() {
 function majParametresGma3(s) {
   if (!s) return;
   majMiseEnRoute(s);   // assistant de mise en route (chantier 3a)
+  // Sonde active : un « ✗ … la sonde ne répond pas » resté affiché est périmé.
+  if (s.sonde && s.sonde.actif) {
+    ["pluginSlotMsg", "mrMsg", "pluginEtapeMsg"].forEach(function (id) {
+      const m = document.getElementById(id);
+      if (m && m.textContent.trim().indexOf("✗") === 0) m.textContent = "";
+    });
+  }
   if (!_pluginSlotFieldsBusy()) _majPluginSlotUI(s.plugin_slot);
   // Bridge RÉELLEMENT démarré (pas juste « l'utilisateur a cliqué une fois ») :
   // remplace tout le fil post-firmware par un résumé (voir #miseEnRouteTerminee
