@@ -17,14 +17,26 @@ the project aims for [semantic versioning](https://semver.org/).
   existing capture assistant; on Mac and Linux it offers the `.bin` and
   `.pcapng` imports. The Check card starts the existing guided setup and can
   be skipped (orange). After a successful capture the assistant opens instead
-  of the old where-will-you-use-it question. The old A-E steps stay for now.
+  of the old where-will-you-use-it question.
 - Setup assistant (second pass, part 1): two more cards after Check. “Keyboard
   shortcuts” is green only when the shortcuts were sent to grandMA3 and the
   keyboard helper has the Accessibility permission (not needed on Windows); its
   button is the same send as the Keys tab. A note says that turning ShCuts on in
   grandMA3 cannot be checked by the app. “Save and start” is green when the
   bridge is running; it offers “Save the configuration” and “Start the bridge”.
-  The old A-E steps are still there.
+
+### Removed
+
+- Old five-step setup flow (pills A to E: OSC, Plugin, Check, Shortcuts, Done)
+  in Settings → Firmware, now fully replaced by the single “Setup” assistant:
+  its pill bar, the OSC and Plugin step panels, the “Personalise your wing”,
+  “Pass to the next step” and shortcuts panels, the “Bridge started —
+  configuration finished” banner, and the hidden “where will you use it?”
+  question after a Windows capture (the assistant opens instead). Nothing is
+  lost: every action lives in a Setup card. The “installing saves your
+  grandMA3 show” warning moved to the Plugin card. The Firmware card keeps its
+  description, capture block, the Setup / Export buttons and the manual
+  fallback.
 
 ### Changed
 

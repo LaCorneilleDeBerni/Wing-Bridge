@@ -257,12 +257,12 @@ async function renumeroterRangee() {
 //
 // `btnId`/`txtId` : PARAMÉTRÉS (19/09/2026) pour être appelables aussi bien
 // depuis l'onglet Touches (#btnShcuts/#shcutsEtat, valeurs par défaut) que
-// depuis l'Étape D du wizard (#btnShcutsWizard/#shcutsEtapeEtat, voir
-// shcutsEnvoyerWizard(), ui/parametres.js). 🐛 Avant : ces ids étaient EN DUR
-// — appelée depuis le wizard, la fonction écrivait bien dans MA3, mais tout
-// son retour (« envoi… », succès, collision, échec) atterrissait dans
-// #shcutsEtat, un élément de l'onglet Touches invisible depuis Paramètres. Le
-// bouton du wizard semblait ne rien faire alors que l'appel avait eu lieu.
+// depuis le carton « Raccourcis clavier » de la Mise en route
+// (#mrShcutsBtn/#mrShcutsEtat, voir _mrEnvoyerRaccourcis(), ui/parametres.js).
+// 🐛 Avant : ces ids étaient EN DUR — appelée depuis Paramètres, la fonction
+// écrivait bien dans MA3, mais tout son retour (« envoi… », succès, collision,
+// échec) atterrissait dans #shcutsEtat, un élément de l'onglet Touches
+// invisible depuis Paramètres.
 async function shcutsRafraichir(btnId = "btnShcuts", txtId = "shcutsEtat") {
   const z = document.getElementById(txtId);
   const b = document.getElementById(btnId);
@@ -385,8 +385,8 @@ async function shcutsEnvoyer(btnId = "btnShcuts", txtId = "shcutsEtat") {
 
 // Formate l'horodate (epoch, secondes) du dernier ENVOI réussi de
 // shcuts_envoyer() en « à l'instant / il y a X / jamais envoyés ». Partagé
-// entre #shcutsHorodate (onglet Touches, ci-dessous) et #shcutsEtapeEtat
-// (étape « Envoie les raccourcis » de l'assistant, ui/parametres.js) : UN
+// entre #shcutsHorodate (onglet Touches, ci-dessous) et le carton « Raccourcis
+// clavier » de la Mise en route (ui/parametres.js) : UN
 // SEUL calcul, deux affichages — ils ne doivent jamais pouvoir diverger.
 function formatHorodateRelatif(epoch) {
   if (!epoch) return t("ui.touches.rac.horodate_jamais");

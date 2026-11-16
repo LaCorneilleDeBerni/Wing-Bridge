@@ -247,7 +247,7 @@ sinon la seconde série semble ne rien faire.
   est **vide** — `KeyboardShortCuts.xml` n'existe que si la console l'a
   **déjà exporté au moins une fois elle-même**. Sans ce fichier,
   `shcuts_envoyer()` (`wing_raccourcis.py`, `_shcuts_gabarit()`) répond
-  `possible: false` et n'écrit rien — l'étape D du wizard l'affiche
+  `possible: false` et n'écrit rien — le carton « Raccourcis clavier » de la Mise en route l'affiche
   maintenant en clair. Ce n'est pas contournable côté app : sans gabarit
   MA3, impossible de connaître la numérotation des 82 raccourcis ni de
   préserver intacts les 33 que Wing Bridge ne gère pas (règle 3, en tête de
@@ -638,7 +638,7 @@ tient `etat.E.LOCK`. Ces deux fonctions sont sorties de `wing_handler.py`
 ## Assistant de mise en route unique : carton « Raccourcis clavier » (16/11/2026, passage 2a)
 
 Le carton 5 de l'assistant unique (`cartonsMiseEnRoute`, `ui/parametres.js`)
-reprend l'ancienne étape D du fil A-E, **sans changer le comportement** :
+reprend l'ancienne étape D de l'ancien fil A-E (retiré le 17/11/2026), **sans changer le comportement** :
 
 - **Détection** (pure, exécutée dans node par le contrôle 6a/6g) : vert
   seulement si `s.shcuts_horodate` (dernier envoi réussi, persisté sur disque)

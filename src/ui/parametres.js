@@ -97,11 +97,7 @@ async function fwCaptureContinuer() {
   if (confirm_) confirm_.style.display = "none";
   const resultat = document.getElementById("fwCaptureResultat");
   if (resultat) { resultat.style.display = "none"; resultat.textContent = ""; }
-  const suite = document.getElementById("fwCaptureSuite");
-  if (suite) suite.style.display = "none";
-  // Repartir propre : masquer un aiguillage d'un run précédent, réarmer Annuler.
-  const aig = document.getElementById("fwCaptureAiguillage");
-  if (aig) aig.style.display = "none";
+  // Repartir propre : réarmer Annuler.
   _fwAnnulDemande = false;
   _fwSuivantMsgFige = false;
   const annMsg = document.getElementById("fwCaptureAnnulerMsg");
@@ -302,15 +298,14 @@ async function fwCaptureSuivant() {
 // courant est en place. Chaque étape s'affiche TOUJOURS : verte « déjà en
 // place » si c'est fait, rouge avec l'action pour la faire sinon — jamais
 // sautée en silence. Cartons : Firmware, OSC, Plugin, Vérification (passage 1),
-// puis Raccourcis clavier et Sauvegarde / Démarrage (passage 2a). L'ancien fil
-// A-E reste en place, il sera retiré au passage 2b.
+// puis Raccourcis clavier et Sauvegarde / Démarrage (passage 2a). Elle a
+// remplacé l'ancien fil en 5 étapes A à E (retiré au passage 2b).
 //
 // Tout le calcul est dans des fonctions PURES (detectionsMiseEnRoute,
 // plateformeMiseEnRoute, cartonsMiseEnRoute, mrSuivantActif), exécutées telles
 // quelles dans node par le contrôle 49. Le reste ne fait que les afficher.
 
-// Détections partagées avec l'ancien fil A-E (majParametresGma3 les utilise
-// aussi : une seule définition de « OSC prêt », « sonde posée / active »).
+// Détections (une seule définition de « OSC prêt », « sonde posée / active »).
 //  - oscPret   : OSC joignable (signal partiel) OU confirmé par la sonde ;
 //  - oscOkFull : la preuve complète (la sonde voit la bonne ligne OSC) ;
 //  - ma3La     : grandMA3 écoute (ok ou muet) ;
@@ -403,7 +398,7 @@ function cartonsMiseEnRoute(s, plateforme, local) {
        { id: "passer", cle: "ui.mr.verif.passer" }], false);
   }
 
-  // Raccourcis clavier (ancienne étape D) : même détection que l'ancien fil —
+  // Raccourcis clavier : détection par
   // shcuts_horodate (dernier envoi RÉUSSI, persisté sur disque) et
   // l'Accessibilité de Wing Keyboard (console.trusted ; sous Windows,
   // console.windows la rend sans objet). ShCuts actif dans grandMA3 n'est PAS
@@ -430,7 +425,7 @@ function cartonsMiseEnRoute(s, plateforme, local) {
   }
   rac.note = "ui.mr.rac.shcuts";
 
-  // Sauvegarde / Démarrage (ancienne étape E) : le bridge tourne-t-il
+  // Sauvegarde / Démarrage : le bridge tourne-t-il
   // (s.mode === "bridge", comme majParametresGma3) ? La sauvegarde, elle, ne
   // se détecte pas : le bouton est proposé, jamais exigé.
   const demarre = s.mode === "bridge";
@@ -461,11 +456,12 @@ function mrSuivantActif(carton) {
 let _mr = { ouvert: false, i: 0, signature: "" };
 let _mrStatut = null;                // dernier /api/status vu par le poll
 let _mrVerifPassee = false;          // « Passer cette étape » cliqué
+let _mrVerifFaite = false;           // configuration guidée allée jusqu'au bout
 let _mrRouvrirApresGuide = false;    // la configuration guidée a été lancée d'ici
 
 function _mrCartons() {
   return cartonsMiseEnRoute(_mrStatut, plateformeMiseEnRoute(_mrStatut),
-    { verifFaite: _etapeCPasseeManuel, verifPassee: _mrVerifPassee });
+    { verifFaite: _mrVerifFaite, verifPassee: _mrVerifPassee });
 }
 
 function assistantMiseEnRouteOuvrir(i) {
@@ -655,8 +651,8 @@ async function _mrInstallerPlugin() {
   return pluginInstaller("mrMsg");
 }
 
-// Envoi des raccourcis : MÊME appel que le bouton de l'onglet Touches et que
-// l'ancienne étape D (shcutsEnvoyer, ui/touches.js, qui attend la preuve de la
+// Envoi des raccourcis : MÊME appel que le bouton de l'onglet Touches
+// (shcutsEnvoyer, ui/touches.js, qui attend la preuve de la
 // sonde avant d'annoncer quoi que ce soit). Le message vit dans #mrShcutsEtat,
 // fixe (la liste de cartons est reconstruite à chaque poll) ; #mrShcutsBtn
 // est un bouton caché, fixe lui aussi, que shcutsEnvoyer() grise pendant
@@ -703,28 +699,6 @@ function _mrAction(id) {
     _mrVerifPassee = true;
     _mr.signature = "";
     assistantMiseEnRouteRendre();
-  }
-}
-
-// Pastilles A–E de la phase de mise en route (post-firmware) — voir le
-// commentaire du balisage (#mercWizStepbar) pour pourquoi des LETTRES et pas
-// des chiffres. `states` : {A:'done'|'current'|'pending'|'warn', B:…, …}.
-// 'warn' : cas révélé le 18/09/2026 — une étape déjà marquée « done » sur la
-// foi d'un signal PARTIEL (reachable === "ok") s'avère fausse une fois la
-// preuve complète disponible (_oscConfigOk, seulement possible sonde active).
-// Une pastille verte qui ment coûte plus cher qu'une pastille orange — voir
-// #finalBloqueOsc. Recalculée à chaque poll, jamais mémorisée.
-function _mercWizStepbar(states) {
-  const ids = { A: "mercPillA", B: "mercPillB", C: "mercPillC", D: "mercPillD", E: "mercPillE" };
-  const couleur = { done: "var(--green)", current: "var(--accent)", warn: "var(--red)", pending: "var(--border)" };
-  const couleurTxt = { done: "var(--green)", current: "var(--accent)", warn: "var(--red)", pending: "var(--muted)" };
-  for (const k in ids) {
-    const el = document.getElementById(ids[k]);
-    if (!el) continue;
-    const st = states[k] || "pending";
-    el.style.opacity = st === "pending" ? "0.45" : "1";
-    el.style.borderColor = couleur[st];
-    el.style.color = couleurTxt[st];
   }
 }
 
@@ -780,12 +754,8 @@ function majCapture(cap) {
       // confirmée. Fichier : … » à ce stade — on le garde tel quel.
       const base = (cap.etape || t("firmware.msg.configure")) + (cap.note || "");
       _fwCaptureResultat(base, cap.note ? "warn" : "ok");
-      // L'assistant de mise en route remplace l'aiguillage « où sera utilisé
-      // Wing Bridge ? » (chantier 3a) : il s'ouvre ici, firmware en vert. Son
-      // action « Exporter le firmware » reprend la branche « autre ordinateur ».
-      // L'aiguillage reste dans le balisage, masqué, pour l'ancien fil A-E.
-      const aig = document.getElementById("fwCaptureAiguillage");
-      if (aig) aig.style.display = "none";
+      // L'assistant de mise en route s'ouvre ici, firmware en vert. Son
+      // action « Exporter le firmware » couvre le cas « autre ordinateur ».
       assistantMiseEnRouteOuvrir();
     } else if (cap.annule) {
       // Annulation demandée par l'utilisateur : message NEUTRE, pas la
@@ -829,36 +799,6 @@ async function fwCaptureAnnulerDemarche() {
   }
 }
 
-// ── Aiguillage de fin de wizard : « où utiliseras-tu Wing Bridge ? » ──────
-// Affiché par majCapture() à la bascule succès (cap.ok===true), AVANT
-// l'invitation « vérifie ta wing » (#fwCaptureSuite). Deux branches :
-//   « ici » (ce PC Windows) → ferme juste l'aiguillage. Le fil standard A→E
-//                             (#oscEtape / #pluginEtape, majParametresGma3())
-//                             prend le relais tout seul au poll suivant —
-//                             voir le 🐛 du 19/09/2026 au balisage
-//                             (#fwCaptureAiguillage, wing_ui.html) : ça
-//                             évite un second chemin d'installation dupliqué
-//                             qui ne respectait pas l'attente de l'étape A.
-//   « mac » (sur un Mac)    → exporter le .bin, l'installer depuis le Mac.
-// Le choix « mac » traité, fwAiguillageFini() révèle #fwCaptureSuite.
-function fwAiguillage(cible) {
-  if (cible === "ici") {
-    const aig = document.getElementById("fwCaptureAiguillage");
-    if (aig) aig.style.display = "none";
-    return;
-  }
-  const mac = document.getElementById("fwAiguillageMac");
-  if (mac) mac.style.display = "";
-}
-
-// Choix « Mac » traité (export lancé, ou rien à faire ici) → passer à la suite.
-function fwAiguillageFini() {
-  const aig = document.getElementById("fwCaptureAiguillage");
-  if (aig) aig.style.display = "none";
-  const suite = document.getElementById("fwCaptureSuite");
-  if (suite) suite.style.display = "";
-}
-
 // Sauter vers un onglet par son data-tab (invitation de fin de capture).
 function allerOnglet(nom) {
   const b = document.querySelector('nav button[data-tab="' + nom + '"]');
@@ -890,55 +830,18 @@ function allerConfigurerFirmware() {
   _designer(document.getElementById("firmwareCard"));
 }
 
-// Étape D du wizard : bouton « ⌨ Envoyer les raccourcis vers MA3 », un
-// SECOND vrai bouton d'envoi (retour auteur, 18/09/2026 : un lien de
-// navigation vers le bouton de l'onglet Touches restait confus, redondant
-// avec les boutons d'onglet de l'étape C). Mince emballage autour de
-// shcutsEnvoyer() (ui/touches.js) — MÊME appel serveur, aucune logique
-// dupliquée.
-//
-// 🐛 Vécu en test réel Windows (19/09/2026) : avant, cet appel se faisait
-// SANS arguments — shcutsEnvoyer() écrivait alors dans #btnShcuts/#shcutsEtat
-// (onglet Touches, en dur), invisibles depuis Paramètres. Le clic envoyait
-// bien la commande à MA3, mais rien ne le disait à côté du bouton du
-// wizard : « envoi… », succès, collision ou échec partaient tous dans un
-// élément caché. shcutsEnvoyer()/shcutsRafraichir() sont désormais
-// paramétrées (ui/touches.js) — on leur passe ICI les ids du wizard.
-//
-// 🐛 2e round (même jour) : un premier correctif protégeait #shcutsEtapeEtat
-// du poll (400 ms) tant que #btnShcutsWizard restait `disabled` — mais CE
-// wrapper le réactive juste après l'attente, donc la garde retombait
-// AUSSITÔT et le poll suivant effaçait le message (« échec, aucun fichier… »
-// vu puis disparu instantanément, constaté en test réel). `disabled` sert à
-// bloquer le double-clic, pas à protéger le message : les deux ne doivent
-// pas partager le même signal. `_shcutsWizardEnvoiJusqua` protège le message
-// pendant une fenêtre fixe, indépendante de l'état du bouton — voir son
-// usage dans majMiseEnRouteSuite() ci-dessous.
-let _shcutsWizardEnvoiJusqua = 0;
-async function shcutsEnvoyerWizard() {
-  const btn = document.getElementById("btnShcutsWizard");
-  if (btn) btn.disabled = true;
-  // Couvre l'appel initial + les ~5 s d'attente de confirmation par la sonde
-  // (shcutsEnvoyer(), ui/touches.js) avec une marge.
-  _shcutsWizardEnvoiJusqua = Date.now() + 7000;
-  await shcutsEnvoyer("btnShcutsWizard", "shcutsEtapeEtat");
-  if (btn) btn.disabled = false;
-}
-
 // Bouton « ← Retour aux Paramètres » de la carte Raccourcis (onglet Touches) :
 // utile depuis la configuration guidée (étape 1/3, qui atterrit ici via
 // assistantDemarrer()) — sans lui, aucun chemin de retour (signalé par
-// l'auteur, 18/09/2026). Cible #fwCaptureSuite (le conteneur), PAS
-// #etapeDRaccourcis : depuis que C/D/E sont des étapes SÉPARÉES (18/09/2026),
-// D peut très bien être déjà masquée (passée) au moment du retour — désigner
-// un élément display:none ne ferait rien.
+// l'auteur, 18/09/2026). Désigne la carte Firmware, où se trouve le bouton
+// « Mise en route ».
 function retourParametresRaccourcis() {
   const b = document.querySelector('nav button[data-tab="parametres"]');
   if (b) b.click();
-  _designer(document.getElementById("fwCaptureSuite"));
+  _designer(document.getElementById("firmwareCard"));
 }
 
-// ── Configuration guidée (Étape C du wizard) ──────────────────────────────
+// ── Configuration guidée (carton « Vérification » de la Mise en route) ──────────────────────────────
 // Décision auteur (18/09/2026) : plutôt qu'une popup qui DUPLIQUERAIT la
 // grille de faders et les groupes d'encodeurs (deux formulaires pour la même
 // donnée = risque de divergence — le projet s'est déjà fait avoir), une
@@ -998,13 +901,9 @@ function _guideAfficherEtape() {
 // fin envoyer vers MA3 »). N'envoie PAS à l'aveugle aux étapes 2→3 et 3→fin :
 // rien à envoyer côté faders/encodeurs, ils s'appliquent déjà au onchange.
 // 🔁 Envoyait les raccourcis ICI (fin de l'étape Touches) — RETIRÉ (18/09/2026,
-// retour auteur) : « ça a encore sauté jusqu'à E quand je fais la
-// programmation de l'étape C ». Cause : si OSC + plugin actif étaient déjà
-// bons, envoyer les raccourcis dès la fin de la configuration guidée rendait
-// D immédiatement « déjà faite » — elle ne s'affichait jamais, avec elle le
-// rappel ShCuts. L'envoi reste désormais UNIQUEMENT dans l'étape D
-// (#btnShcutsWizard) : c'est la seule façon de garantir que D est
-// réellement vue avant que E ne devienne possible.
+// retour auteur) : l'envoi se fait désormais UNIQUEMENT depuis le carton
+// « Raccourcis clavier » de la Mise en route (_mrEnvoyerRaccourcis), pour que
+// le rappel ShCuts soit réellement vu avant l'envoi.
 function configGuideeSuivant() {
   _guideEtat++;
   _guideAfficherEtape();
@@ -1018,26 +917,24 @@ function configGuideeQuitter() {
 }
 
 // Fin des 3 étapes : referme la bannière et reprend le fil normal du wizard.
-// Marque aussi l'étape C comme passée (etapeCSuivante() plus haut) : être
-// allé au bout de la configuration guidée EST la vérification de la wing que
-// C demande — sans ce drapeau, revenir sur Paramètres réafficherait C après
-// l'avoir déjà faite via la bannière.
+// Marque aussi la vérification comme faite (_mrVerifFaite) : être allé au
+// bout de la configuration guidée EST la vérification de la wing que le
+// carton « Vérification » de la Mise en route demande.
 function configGuideeTerminer() {
   const reprendre = _mrRouvrirApresGuide;   // lancée depuis l'assistant de mise en route
   configGuideeQuitter();
-  etapeCSuivante();
+  _mrVerifFaite = true;
   retourParametresRaccourcis();
   if (reprendre) assistantMiseEnRouteOuvrir(3);
 }
 
-// Étape E du wizard : bouton « 💾 Sauvegarder la configuration », juste avant
-// « Démarrer le bridge » (demande auteur, 18/09/2026) — mince emballage
-// autour de saveActiveProfile() (ui/profils.js, MÊME code que le bouton
-// « 💾 Enregistrer » de l'en-tête, aucune logique dupliquée), avec un retour
-// affiché sur place plutôt que de faire remonter l'utilisateur voir le point
-// « modifié » de l'en-tête.
+// Carton « Sauvegarde » de la Mise en route : mince emballage autour de
+// saveActiveProfile() (ui/profils.js, MÊME code que le bouton « 💾 Enregistrer »
+// de l'en-tête, aucune logique dupliquée), avec un retour affiché sur place
+// (#mrMsg, passé en argument) plutôt que de faire remonter l'utilisateur voir
+// le point « modifié » de l'en-tête.
 async function sauvegarderConfigWizard(msgId) {
-  const msg = document.getElementById(msgId || "sauvegardeWizardMsg");
+  const msg = msgId ? document.getElementById(msgId) : null;
   if (msg) { msg.textContent = t("ui.param.guide.sauvegarde_en_cours"); msg.style.color = ""; }
   try {
     await saveActiveProfile();
@@ -1048,26 +945,18 @@ async function sauvegarderConfigWizard(msgId) {
   if (msg) { msg.textContent = t("ui.param.guide.sauvegarde_ok"); msg.style.color = "var(--green)"; }
 }
 
-// Étape E du wizard : bouton « ▶ Démarrer le bridge ». Décision assumée
-// (session du 18/09/2026) : contrairement à l'ancien comportement (juste
-// rediriger vers l'onglet Bridge, laisser l'utilisateur cliquer lui-même),
+// Carton « Démarrage » de la Mise en route. Décision assumée (18/09/2026) :
 // ce bouton démarre RÉELLEMENT le bridge — le même geste que #bridgeBtn
-// (toggleBridge(), ui/bridge.js) — puis bascule sur l'onglet Bridge, puis
-// referme les <details> « pourquoi » du wizard (elles ne portent pas d'id,
-// donc pas de mémorisation localStorage — sans ce nettoyage explicite, elles
-// resteraient dépliées en mémoire DOM jusqu'au prochain rechargement complet).
+// (toggleBridge(), ui/bridge.js) — puis bascule sur l'onglet Bridge.
 // Ne toggle PAS à l'aveugle : si le bridge tournait déjà, on ne veut pas
 // l'arrêter par erreur.
 async function allerDemarrerBridge() {
   if (currentMode !== "bridge") await toggleBridge();
   const b = document.querySelector('nav button[data-tab="bridge"]');
   if (b) b.click();
-  document.querySelectorAll(
-    "#oscEtape details.help, #pluginEtape details.help, #fwCaptureSuite details.help"
-  ).forEach(d => { d.open = false; });
 }
 
-// ── Étape assistant : OSC est-il VRAIMENT activé dans grandMA3 ? ──────────
+// ── OSC : est-il VRAIMENT activé dans grandMA3 ? ──────────
 // installer_plugin() (wing_ma3.py) accepte ma3_reachable() in ("ok","muet") —
 // donc tente l'import même si MA3 n'écoute pas — mais un import qui n'arrive
 // jamais ne peut pas faire avancer la sonde : sans OSC actif, l'installation
@@ -1087,203 +976,6 @@ function _oscConfigOk(ma3) {
   if (!ma3.entree) return false;
   return (ma3.configs || []).some(c =>
     Number(c.port) === Number(ma3.port_attendu) && c.recoit && c.rec_cmd);
-}
-
-// Repli honnête tant que la sonde n'est pas active : ma3_reachable() dit déjà
-// si MA3 écoute sur le port OSC attendu (osc.reachable === "ok"), ce qui est
-// un signe fort (mais PARTIEL : ça ne prouve pas Receive Command) que l'OSC
-// est bien configuré. On le dit comme tel, jamais comme une preuve complète.
-function majOscEtape(s, montrer) {
-  const bloc = document.getElementById("oscEtape");
-  if (!bloc) return;
-  bloc.style.display = montrer ? "" : "none";
-  if (!montrer) return;
-  const etat = document.getElementById("oscEtapeEtat");
-  if (!etat) return;
-  const ok = _oscConfigOk(s.osc && s.osc.ma3);
-  if (ok === true) {
-    etat.textContent = t("ui.param.fw.osc_etape_ok");
-    etat.style.color = "var(--green)";
-  } else if (ok === false) {
-    etat.textContent = t("ui.param.fw.osc_etape_ko");
-    etat.style.color = "var(--red)";
-  } else {
-    const r = s.osc ? s.osc.reachable : null;
-    if (r === "ok") {
-      etat.textContent = t("ui.param.fw.osc_etape_partiel_ok");
-      etat.style.color = "var(--accent)";
-    } else if (r === "muet") {
-      // Texte retiré (retour auteur, 18/09/2026) : redondant avec le
-      // diagnostic déjà visible ailleurs, et source de confusion pendant les
-      // tests. Rien à afficher tant qu'on n'a que ce signal partiel.
-      etat.textContent = "";
-    } else {
-      etat.textContent = t("ui.param.fw.osc_etape_lance_ma3");
-      etat.style.color = "";
-    }
-  }
-}
-
-// ── Suite de la mise en route : #fwCaptureSuite (vérifie ta wing → envoie
-// les raccourcis → démarre le bridge). Poll-driven comme le reste de cette
-// carte : revenir sur l'assistant après avoir déjà tout fait doit montrer
-// directement les bonnes coches, jamais repartir de zéro. ──────────────────
-// Étape C : rien ne permet de DÉTECTER que l'utilisateur a vérifié sa wing
-// (contrairement à A→B, gaté sur oscReady/oscOkFull) — bouton manuel, posé
-// une fois pour la session (retour auteur, 18/09/2026 : « C/D/E séparées,
-// comme A et B, avec un bouton passer à l'étape suivante si besoin »).
-let _etapeCPasseeManuel = false;
-function etapeCSuivante() { _etapeCPasseeManuel = true; }
-
-// 🔁 Un bouton « ✅ ShCuts activé dans MA3 » a existé ici brièvement (même
-// session, 18/09/2026) pour gater le passage D→E — RETIRÉ aussitôt, retour
-// auteur : « ça n'a aucun sens, ça n'active pas le bouton dans MA3, et ça
-// laisse croire que c'est fait alors que non ». Un bouton qui affirme sans
-// vérifier est pire qu'une absence de bouton (GUIDE_PROJET.md). ShCuts reste donc
-// une information affichée dans D (jamais prétendue confirmée) — voir le
-// commentaire du balisage, #etapeDRaccourcis.
-//
-// 🐛 D→E est ensuite RESTÉ gaté sur shcuts_horodate (+ oscOk/active/Accessibilité)
-// — signal réel, mais PERSISTÉ SUR DISQUE (wing_reglages.py charge
-// SETTINGS["shcuts_horodate"] depuis le fichier de config) : une fois envoyé
-// UNE fois, il reste vrai pour toujours, même après relancer l'app ou
-// reprendre C depuis zéro. Conséquence vécue 3 fois de suite (18/09/2026,
-// avec l'auteur) : dès que C (re)passait vrai — via la configuration guidée
-// ou le bouton manuel — D se retrouvait déjà « remplie » par un envoi d'un
-// test précédent et sautait direct à E, sans jamais être vue. Même les 4
-// conditions réelles réunies ne prouvent pas que CETTE traversée du wizard a
-// vu D. Repli sur le MÊME motif que C : un bouton manuel, neutre, qui ne
-// prétend rien vérifier (juste « je passe à la suite »).
-let _etapeDPasseeManuel = false;
-function etapeDSuivante() { _etapeDPasseeManuel = true; }
-
-// « ← Étape précédente » (D revient à C, E revient à D).
-function etapePrecedente(vers) {
-  if (vers === "C") _etapeCPasseeManuel = false;
-  else if (vers === "D") _etapeDPasseeManuel = false;
-}
-
-function majMiseEnRouteSuite(s, present, active, bridgeActif) {
-  const suite = document.getElementById("fwCaptureSuite");
-  if (!suite) return;
-  // Pas pendant une capture Windows en cours (repartir propre) : voir
-  // fwCaptureContinuer(), qui masque cet encart au lancement d'une nouvelle
-  // tentative — sans cette garde, ce calcul le referait apparaître au poll
-  // suivant (400 ms) si un plugin d'une INSTALLATION PRÉCÉDENTE est déjà là.
-  // Pas non plus une fois le bridge RÉELLEMENT démarré : #miseEnRouteTerminee
-  // (majParametresGma3) prend le relais avec un résumé — retour auteur
-  // (18/09/2026) : cliquer « Démarrer le bridge » laissait tout le fil C/D/E
-  // affiché à l'identique au lieu de disparaître.
-  const capActive = !!(s.capture && s.capture.actif);
-  const montrer = present && !capActive && !bridgeActif;
-  suite.style.display = montrer ? "" : "none";
-  if (!montrer) return;
-
-  // 🐛 Vécu en test réel (18/09/2026, avec l'auteur) : « j'ai cliqué sur
-  // relancer le plugin, ça m'a encore renvoyé en E ». La sonde tombée puis
-  // relancée avec succès reconstituait TOUTES les conditions réelles
-  // (present, active, oscOk, shcuts_horodate déjà envoyés plus tôt) — donc E
-  // redevenait légitimement prête, mais _etapeCPasseeManuel restait posé
-  // depuis un passage antérieur de C, sans que l'auteur ait rien revérifié
-  // cette fois. Une sonde tombée = quelque chose s'est cassé = redemander la
-  // vérification depuis C plutôt que de sauter dessus en silence. Même
-  // principe pour D : une sonde retombée corrèle souvent avec un
-  // redémarrage de MA3 (qui remet ShCuts à son état par défaut).
-  if (!active) { _etapeCPasseeManuel = false; _etapeDPasseeManuel = false; }
-
-  // Ligne d'état du plugin (sonde), à l'étape C SEULEMENT — voir
-  // _pluginStatutLigne() plus bas. La sonde qui tombe se dit en silence (MA3
-  // ne le signale nulle part) : le wizard recule à C (ligne ci-dessus), et
-  // c'est là que l'avertissement + « Relancer » s'affichent. Pas à D ni E :
-  // ils y seraient inatteignables (le recul les masque avant tout affichage).
-  _pluginStatutLigne("pluginStatutTxtC", "wizRelancerBtn", s, active);
-
-  // Pas pendant (ni juste après) un envoi : shcutsEnvoyer() écrit ICI MÊME du
-  // texte vivant (« envoi… », collision, ⛔ non appliqué, échec…) — un poll
-  // (400 ms) qui écraserait ça par le seul horodate reviendrait au bug du
-  // 19/09/2026 (feedback invisible), sous une autre forme. Fenêtre fixe
-  // (_shcutsWizardEnvoiJusqua, posée par shcutsEnvoyerWizard() ci-dessus),
-  // PAS l'état `disabled` du bouton : ce dernier est réactivé dès la fin de
-  // l'envoi, avant même que ce poll-ci ne repasse — s'y fier effaçait le
-  // message aussitôt affiché (constaté en test réel).
-  const etapeEtat = document.getElementById("shcutsEtapeEtat");
-  if (etapeEtat && Date.now() >= _shcutsWizardEnvoiJusqua) {
-    const h = s.shcuts_horodate;
-    etapeEtat.textContent = formatHorodateRelatif(h);
-    etapeEtat.style.color = h ? "" : "var(--accent)";
-  }
-
-  // Sous-étape D : Accessibilité macOS pour Wing Keyboard — voir le
-  // commentaire du balisage (#accessEtapeMac). ABSENTE sous Windows
-  // (console.windows), pas juste verte : rien à vérifier ni à faire là-bas.
-  const cons = s.console || {};
-  // 🐛 Vécu en test réel (18/09/2026) : « ça passe à l'étape E, sauf que ça
-  // ignore que l'accessibilité n'est pas autorisée pour le clavier ». Sans
-  // Accessibilité accordée, macOS refuse en silence l'injection des frappes
-  // (CGEvent) — les raccourcis envoyés n'ont AUCUNE chance d'arriver à MA3,
-  // même une fois « prêt » par ailleurs. Sur Windows, `cons.windows` rend
-  // `cons.trusted` toujours vrai (SendInput ne demande aucune permission,
-  // voir #accessEtapeMac) : cette condition ne bloque donc jamais là-bas.
-  const accessOk = !!(cons.windows || cons.trusted);
-  const accessBloc = document.getElementById("accessEtapeMac");
-  if (accessBloc) {
-    accessBloc.style.display = cons.windows ? "none" : "";
-    if (!cons.windows) {
-      const accessEtat = document.getElementById("accessEtapeEtat");
-      if (accessEtat) {
-        if (!cons.enabled) {
-          accessEtat.textContent = t("ui.param.fw.access_etape_absent");
-          accessEtat.style.color = "";
-        } else if (cons.trusted) {
-          accessEtat.textContent = t("ui.param.fw.access_etape_ok");
-          accessEtat.style.color = "var(--green)";
-        } else {
-          accessEtat.textContent = t("ui.param.fw.access_etape_ko");
-          accessEtat.style.color = "var(--red)";
-        }
-      }
-    }
-  }
-
-  // oscOk/active/shcuts_horodate/accessOk restent un diagnostic AFFICHÉ
-  // (#finalBloqueOsc) tant que D est visible — ils NE GATENT PLUS D→E depuis
-  // le 🐛 au-dessus de _etapeDPasseeManuel : shcuts_horodate survit à un
-  // rechargement complet de l'app, donc « prêt » ne veut pas dire « vu à
-  // CETTE traversée du wizard ».
-  const oscOk = _oscConfigOk(s.osc && s.osc.ma3) === true;
-
-  // C passée : UNIQUEMENT le bouton manuel (etapeCSuivante() ci-dessus, ou
-  // configGuideeTerminer() plus bas, qui le pose aussi à la fin de la
-  // configuration guidée). 🐛 Vécu en test réel (18/09/2026, avec l'auteur) :
-  // `!!s.shcuts_horodate` servait AUSSI de bascule implicite pour gérer le
-  // retour sur une config déjà faite — mais shcuts_horodate est un
-  // horodatage qui survit à une RÉINSTALLATION du plugin (B relancé pendant
-  // un test), donc ça sautait direct à E dès que B repassait actif, sans
-  // jamais laisser voir C ni D. `_etapeCPasseeManuel` seul se réinitialise à
-  // chaque rechargement de page — page acceptable : le résumé
-  // #miseEnRouteTerminee prend de toute façon le relais dès que le bridge
-  // est réellement démarré (voir majParametresGma3()).
-  const cPassee = _etapeCPasseeManuel;
-  // D passée : UNIQUEMENT le bouton manuel (etapeDSuivante(), voir le 🐛
-  // au-dessus de sa déclaration) — jamais déduit de pretReel.
-  const dPassee = _etapeDPasseeManuel;
-
-  const blocC = document.getElementById("etapeCBloc");
-  if (blocC) blocC.style.display = cPassee ? "none" : "";
-
-  const blocD = document.getElementById("etapeDRaccourcis");
-  if (blocD) blocD.style.display = (cPassee && !dPassee) ? "" : "none";
-
-  // Diagnostic honnête, purement informatif tant que D est affichée : tout
-  // est fait (plugin actif, raccourcis envoyés) SAUF la confirmation OSC
-  // complète — sans ce message, rien ne dit pourquoi (voir le commentaire du
-  // balisage, #finalBloqueOsc). Ne bloque plus le passage (D→E est manuel
-  // désormais) : c'est un avertissement, pas un verrou.
-  const bloque = document.getElementById("finalBloqueOsc");
-  if (bloque) bloque.style.display = (cPassee && !dPassee && !oscOk && active && !!s.shcuts_horodate) ? "" : "none";
-
-  const finale = document.getElementById("miseEnRouteFinale");
-  if (finale) finale.style.display = (cPassee && dPassee) ? "" : "none";
 }
 
 // ── grandMA3 : cible OSC + plugin (sonde Lua) ─────────────────────────
@@ -1371,20 +1063,12 @@ function majParametresGma3(s) {
   majMiseEnRoute(s);   // assistant de mise en route (chantier 3a)
   // Sonde active : un « ✗ … la sonde ne répond pas » resté affiché est périmé.
   if (s.sonde && s.sonde.actif) {
-    ["pluginSlotMsg", "mrMsg", "pluginEtapeMsg"].forEach(function (id) {
+    ["pluginSlotMsg", "mrMsg"].forEach(function (id) {
       const m = document.getElementById(id);
       if (m && m.textContent.trim().indexOf("✗") === 0) m.textContent = "";
     });
   }
   if (!_pluginSlotFieldsBusy()) _majPluginSlotUI(s.plugin_slot);
-  // Bridge RÉELLEMENT démarré (pas juste « l'utilisateur a cliqué une fois ») :
-  // remplace tout le fil post-firmware par un résumé (voir #miseEnRouteTerminee
-  // et majMiseEnRouteSuite ci-dessous). Dérivé de l'état serveur, pas d'un
-  // indicateur côté client — redevient vrai tout seul si le bridge s'arrête,
-  // et reste vrai après un relancement de l'app si le bridge repart seul
-  // (want_connected), sans qu'on ait besoin de mémoriser « configuration
-  // faite une fois » séparément.
-  const bridgeActif = s.mode === "bridge";
   const r = s.osc ? s.osc.reachable : null;
 
   // Cible OSC : pastille ● connecté / ○ absent
@@ -1442,123 +1126,13 @@ function majParametresGma3(s) {
   // grandMA3 joignable — c'est le seul cas où « relancer » a du sens.
   const relZone = document.getElementById("gma3RelancerZone");
   if (relZone) relZone.style.display = (!active && present && ma3La) ? "" : "none";
-
-  // Encart « installer le plugin » de la carte Firmware : mise en route —
-  // firmware configuré ET fichiers PAS encore posés sur le disque MA3.
-  //
-  // 🐛 Avant, la condition portait aussi `!active` : elle échouait dès qu'une
-  // sonde tournait ENCORE dans la mémoire de grandMA3 (sa boucle Lua + `_G`
-  // survivent à la suppression des .lua/.xml — `present` passe à false, mais
-  // `actif` reste true tant que MA3 réécrit wingbridge_state.json ; idem
-  // pendant les ~5 s de grâce `_MA3_ALIVE_DEPUIS` après un (re)démarrage de
-  // MA3). L'encart d'installation restait alors masqué alors que le plugin
-  // n'est PAS installé sur le disque. On ne teste donc plus que `!present` :
-  // dès que les fichiers sont là, c'est le bouton « Relancer » de la carte
-  // grandMA3 qui distingue « tourne » de « arrêté ».
-  //
-  // Masqué aussi tant que l'aiguillage de fin de wizard est à l'écran : il
-  // propose déjà l'installation, inutile de doubler.
-  const aig = document.getElementById("fwCaptureAiguillage");
-  const aigVisible = !!(aig && aig.style.display !== "none");
-
-  // Étape A (OSC) → étape B (plugin) : désormais SÉQUENTIELLES, pas montrées
-  // ensemble. Deux signaux, on prend le meilleur des deux :
-  //   oscReady    (osc.reachable === "ok") : le seul dispo AVANT que le
-  //               plugin tourne (poule-et-œuf, voir _oscConfigOk ci-dessus).
-  //   oscOkFull   (_oscConfigOk === true) : la PREUVE complète, dispo dès que
-  //               la sonde est active — y compris une sonde ORPHELINE
-  //               (actif=true, present=false : le script Lua tourne encore
-  //               en mémoire dans MA3 alors que ses fichiers ont disparu du
-  //               disque, cf. le commentaire plus bas sur `present`).
-  // 🐛 Vécu en test réel (18/09/2026, avec l'auteur) : reachable coincé sur
-  // "muet" (heuristique socket, lsof) alors que la sonde — orpheline — avait
-  // DÉJÀ confirmé la config OSC correcte (oscOkFull true). Ne gater que sur
-  // oscReady bloquait A→B indéfiniment malgré une preuve plus forte
-  // disponible. D'où le OU : dès que l'UN des deux signaux est bon, B prend
-  // le relais — jamais A et B en même temps.
-  const det3 = detectionsMiseEnRoute(s);
-  const oscOkFull = det3.oscOkFull;
-  const oscPret = det3.oscPret;
-  // 🐛 Vécu en test réel Windows (19/09/2026) : l'étape A apparaissait DÈS
-  // que le firmware était sauvegardé sur disque (wing_init.enregistrer_firmware,
-  // capturer_firmware() l'appelle en tout début de ses phases 5-7 : fermer
-  // grandMA2 onPC, débrancher/rebrancher la wing, retirer USBPcap — s.firmware.
-  // configure passe donc à true LONGTEMPS avant que capture.actif ne retombe
-  // et que l'aiguillage ne s'affiche), pendant que la barre de progression de
-  // capture était ENCORE à l'écran (phase 5/7, 6/7…) : les deux se chevauchaient.
-  // `!capActive` referme ce trou, même motif que majMiseEnRouteSuite() plus haut.
-  const capActive = !!(s.capture && s.capture.actif);
-  const enPhaseMiseEnRoute = !!(s.firmware && s.firmware.configure) && !present && !capActive && !aigVisible;
-  majOscEtape(s, enPhaseMiseEnRoute && !oscPret);
-
-  const etape = document.getElementById("pluginEtape");
-  if (etape) {
-    const montrer = enPhaseMiseEnRoute && oscPret;
-    etape.style.display = montrer ? "" : "none";
-    if (montrer) {
-      const bInstall = document.getElementById("pluginInstallBtn");
-      const manuel = document.getElementById("pluginEtapeManuel");
-      if (bInstall) bInstall.style.display = ma3La ? "" : "none";
-      if (manuel) manuel.textContent = ma3La
-        ? t("ui.param.plugin.manuel_ma3")
-        : t("ui.param.plugin.manuel_no_ma3");
-    }
-  }
-
-  // Suite (vérifie ta wing → envoie les raccourcis → démarre le bridge) :
-  // dès que le plugin est POSÉ, quelle que soit la plateforme ou le chemin
-  // d'installation emprunté (aiguillage Windows ou #pluginEtape général).
-  majMiseEnRouteSuite(s, present, active, bridgeActif);
-
-  // Résumé « configuration terminée » (#miseEnRouteTerminee) : seulement une
-  // fois le plugin déjà posé UNE fois (`present`) ET le bridge réellement
-  // actif — pas avant, sinon un bridge démarré par ailleurs sans être passé
-  // par ce wizard afficherait un résumé qui n'a rien résumé.
-  const termine = document.getElementById("miseEnRouteTerminee");
-  if (termine) termine.style.display = (present && bridgeActif) ? "" : "none";
-
-  // Repère de progression A → E (voir le commentaire du balisage,
-  // #mercWizStepbar) : masqué hors de cette phase (firmware pas encore
-  // configuré, aiguillage de fin de capture Windows à l'écran, OU bridge déjà
-  // démarré — voir #miseEnRouteTerminee juste au-dessus, qui prend le relais).
-  const wizBar = document.getElementById("mercWizStepbar");
-  if (wizBar) {
-    // Même garde-fou que ci-dessus (capActive) : la barre de progression A-E
-    // ne doit pas apparaître pendant qu'une capture de firmware est encore en
-    // cours (phases 5-7, firmware déjà configuré mais capture pas terminée).
-    const dansLaPhase = !!(s.firmware && s.firmware.configure) && !capActive && !aigVisible && !bridgeActif;
-    wizBar.style.display = dansLaPhase ? "" : "none";
-    if (dansLaPhase) {
-      const stepCDVisible = present && !capActive;
-      // Même calcul que dans majMiseEnRouteSuite() (voir son commentaire sur
-      // le 🐛 du 18/09/2026) — UNIQUEMENT les boutons manuels, jamais déduit
-      // de shcuts_horodate (persisté sur disque, donc pas fiable pour savoir
-      // si CETTE traversée du wizard a vu C et D). _etapeCPasseeManuel et
-      // _etapeDPasseeManuel sont déclarées juste au-dessus de
-      // majMiseEnRouteSuite() dans ce fichier (portée globale).
-      const cPassee = _etapeCPasseeManuel;
-      const stepEVisible = stepCDVisible && cPassee && _etapeDPasseeManuel;
-      // Étape A rétroactivement fausse : marquée « done » sur la foi du seul
-      // oscReady (partiel), mais une fois la sonde active la preuve complète
-      // (_oscConfigOk) dit non — voir #finalBloqueOsc.
-      const oscBloque = present && active && !oscOkFull;
-      _mercWizStepbar({
-        A: oscBloque ? "warn" : (!present && !oscPret ? "current" : "done"),
-        B: !present && oscPret ? "current" : (present ? "done" : "pending"),
-        C: !stepCDVisible ? "pending" : (cPassee ? "done" : "current"),
-        D: !stepCDVisible ? "pending" : (stepEVisible ? "done" : (cPassee ? "current" : "pending")),
-        E: stepEVisible ? "current" : (oscBloque ? "warn" : "pending"),
-      });
-    }
-  }
 }
 
 // Relance l'amorce PAR SON NOM en OSC (`Plugin "WingLoader"` — pas de numéro
 // de slot), ~2 s côté serveur. Factorisé pour avoir DEUX boutons (carte
-// grandMA3, et l'étape C du wizard — voir _pluginStatutLigne() ci-dessous)
-// qui appellent EXACTEMENT le même code : des copies auraient
-// fini par diverger (déjà arrivé ailleurs dans ce projet — GUIDE_PROJET.md, boutons
-// d'executor).
+// grandMA3, et carton « Plugin » de la Mise en route) qui appellent
+// EXACTEMENT le même code : des copies auraient fini par diverger (déjà
+// arrivé ailleurs dans ce projet — GUIDE_PROJET.md, boutons d'executor).
 async function _relancerPlugin(msgElId, btnElId) {
   const btn = btnElId ? document.getElementById(btnElId) : null;
   const msg = msgElId ? document.getElementById(msgElId) : null;
@@ -1582,61 +1156,26 @@ async function _relancerPlugin(msgElId, btnElId) {
 }
 // Bouton « 🔁 Relancer le plugin dans grandMA3 » (carte grandMA3, sous la pastille).
 function pluginRelancer() { return _relancerPlugin("gma3RelancerMsg", "gma3RelancerBtn"); }
-// Même bouton, DEPUIS l'étape C du wizard (voir _pluginStatutLigne()
-// ci-dessous), sans jamais dupliquer le CODE
-// de relance. Feedback affiché sur place, pas besoin d'aller chercher la
-// carte grandMA3 plus haut dans l'onglet.
-function relancerPluginWizard() {
-  return _relancerPlugin("wizRelancerMsg", "wizRelancerBtn");
-}
-
-// Ligne d'état compacte du plugin (sonde) — voir le commentaire du balisage
-// (#pluginStatutTxtC). Visible EN CONTINU à l'étape C, pas seulement à
-// l'échec : l'utilisateur doit voir que tout va bien aussi, pas juste être
-// averti quand ça casse. Appelée par majMiseEnRouteSuite().
-function _pluginStatutLigne(txtElId, btnElId, s, active) {
-  const txt = document.getElementById(txtElId);
-  if (txt) {
-    if (active) {
-      // Pas de "✓ " concaténé en dur : la couleur verte porte déjà le sens
-      // (même motif que la pastille de la carte grandMA3, jamais de coche
-      // ajoutée devant plural() — smoke test (e), pas d'assemblage de phrase).
-      txt.textContent = plural("ui.sante.sonde.actif", (s.sonde && s.sonde.executors) || 0)
-        + ((s.sonde && s.sonde.page) ? t("ui.sante.sonde.page", { page: s.sonde.page }) : "");
-      txt.style.color = "var(--green)";
-    } else {
-      txt.textContent = t("ui.param.fw.plugin_arrete_court");
-      txt.style.color = "var(--accent)";
-    }
-  }
-  const btn = document.getElementById(btnElId);
-  if (btn) btn.style.display = active ? "none" : "";
-}
-
-// Bouton « 🧩 Installer automatiquement » (carte Firmware). Copie + import OSC
-// + vérif sonde côté serveur (~3,5 s). Échec → message actionnable + on
-// déplie la procédure manuelle de la carte grandMA3.
+// Installation du plugin (carton « Plugin » de la Mise en route, et bouton de
+// la carte grandMA3). Copie + import OSC + vérif sonde côté serveur (~3,5 s).
+// Échec → message actionnable + on déplie la procédure manuelle de la carte
+// grandMA3. `msgElId` : l'élément où écrire le retour (#mrMsg, #pluginSlotMsg).
 async function pluginInstaller(msgElId) {
-  const btn = document.getElementById("pluginInstallBtn");
-  const msg = document.getElementById(msgElId || "pluginEtapeMsg");
-  if (btn) btn.disabled = true;
+  const msg = msgElId ? document.getElementById(msgElId) : null;
   if (msg) { msg.textContent = t("ui.param.plugin.install_en_cours"); msg.style.color = ""; }
   let r;
   try { r = await api("/api/plugin/install", {}); }
   catch (e) {
     if (msg) { msg.textContent = t("ui.param.echec_requete"); msg.style.color = "var(--red)"; }
-    if (btn) btn.disabled = false;
     return;
   }
   if (r && r.ok) {
     if (msg) { msg.textContent = "✓ " + (r.message || t("err.ma3.plugin_installe")); msg.style.color = "var(--green)"; }
-    // majParametresGma3 masquera l'étape au prochain tick (sonde active).
   } else {
     if (msg) { msg.textContent = "✗ " + ((r && r.raison) || t("firmware.msg.echec")); msg.style.color = "var(--red)"; }
     const det = document.getElementById("gma3PluginDetails");
     if (det) det.open = true;
   }
-  if (btn) btn.disabled = false;
 }
 
 // ── DMX ───────────────────────────────────────────────────────────────

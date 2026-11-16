@@ -142,8 +142,8 @@ info → Run anyway**. One time only.
 7. **Install the MA3 plugin.** A mandatory step, on the same footing as the
    firmware: without it, Wing Bridge sends OSC **blind** — no executor LED
    feedback, no fader pickup, no page awareness. With grandMA3 running, the
-   **“🧩 Install automatically”** button (Settings → 🧩 Wing firmware) does
-   everything; otherwise, the manual procedure is in **Settings → 🎛️ grandMA3**
+   **“Setup”** assistant (Settings → 🧩 Wing firmware, “Plugin in grandMA3”
+   card, “Install the plugin”) does everything; otherwise, the manual procedure is in **Settings → 🎛️ grandMA3**
    (and [“MA3 plugin”](#ma3-plugin--the-consoles-state-feedback) below).
 8. **Open grandMA3 onPC**, then the **Bridge → Start** tab.
 
@@ -197,7 +197,7 @@ reachable and the console doesn't see the plugin, the activity bar at the top of
 the interface scrolls **“grandMA3 plugin not installed”**.
 
 **The simplest way**: with grandMA3 running, go to **Settings → 🧩 Wing firmware
-→ “🧩 Install automatically”**. The app copies the files into MA3's pool, sends
+→ “Setup”**, then on the **“Plugin in grandMA3”** card click **“Install the plugin”**. The app copies the files into MA3's pool, sends
 the import + `SaveShow`, and checks that the probe answers. On failure, it falls
 back to the manual procedure.
 

@@ -330,11 +330,13 @@ chiffre.
   `wing_ma3.relancer_plugin()` : un seul `/cmd 'Plugin "WingLoader"'` en OSC (par
   le NOM de l'amorce, pas un numéro de slot), pas de re-copie, pas de ré-import,
   pas de `SaveShow`.
-- L'encart « Installer le plugin » de la **carte 🧩 Firmware** ne sert plus qu'à
-  la **mise en route** (firmware configuré + sonde inactive + fichiers PAS
-  encore posés) : bouton **« 🧩 Installer automatiquement »**
-  (`/api/plugin/install`, réinstallation complète). Dès que les fichiers sont
-  là, il disparaît au profit du bouton « Relancer » de la carte grandMA3.
+- L'installation du plugin à la **mise en route** passe par le carton
+  « Plugin dans grandMA3 » de l'assistant unique (bouton **« Installer le
+  plugin »**, `_mrInstallerPlugin` → `pluginInstaller()` → `/api/plugin/install`,
+  réinstallation complète) ; l'ancien encart « Installer automatiquement » de la
+  carte Firmware (fil A à E) a été retiré le 17/11/2026. Dès que les fichiers
+  sont là, le carton propose « Relancer le plugin » (comme le bouton de la
+  carte grandMA3).
 
 ### 7. Le mot-clé envoyé existe-t-il ?
 
@@ -640,7 +642,7 @@ Plugin 1
 
 Syntaxe validée du premier coup. `1` est l'emplacement (slot) du pool
 Plugins de MA3 — **configurable**, `SETTINGS["plugin_slot"]` (Paramètres →
-🎛️ grandMA3, ou l'aiguillage de fin d'assistant firmware sous Windows), défaut
+🎛️ grandMA3, ou carton « Plugin » de la Mise en route), défaut
 1 (changé de 3 à 1 en v1.0.3 ; l'assistant de mise en route propose aussi le
 champ, avec l'avertissement Overwrite / Merge / Cancel et la rubrique d'aide
 `pluginSlot`). `wing_ma3._plugin_osc(slot)` génère cette
@@ -1538,30 +1540,29 @@ plugin sur le disque (`present` devient vrai même sur cet échec — à savoir 
 on relance le test). **L'étape OSC doit donc précéder l'étape plugin dans le
 parcours de l'assistant**, pas l'inverse.
 
-Onglet Paramètres → carte 🧩 Firmware de la wing, nouvelle étape « Active
-l'OSC dans grandMA3 » (`#oscEtape`, `ui/parametres.js::majOscEtape`), affichée
-dans les mêmes conditions que l'étape plugin mais AVANT elle dans le
-balisage. Trois niveaux de vérification, jamais une hypothèse déguisée en
-fait :
+Onglet Paramètres → carte 🧩 Firmware de la wing → bouton « Mise en route » :
+le carton « OSC dans grandMA3 » de l'assistant unique (`cartonsMiseEnRoute`,
+`detectionsMiseEnRoute`, `ui/parametres.js`) précède le carton « Plugin ». Il
+remplace l'ancienne étape A du fil A à E (`#oscEtape`, `majOscEtape`), retirée
+le 17/11/2026 (passage 2b). Deux niveaux de vérification, jamais une
+hypothèse déguisée en fait (`_oscConfigOk` est conservée, la détection est la
+même qu'avant) :
 
-| État | Ce qu'on affiche | D'où ça vient |
+| État | Pastille du carton | D'où ça vient |
 |---|---|---|
-| Sonde active, ligne 8000 confirmée (Receive + Receive Command) | ✅ complet | `osc_config_ma3()`, la sonde tourne DANS MA3 — une preuve |
-| Sonde pas encore active, mais `ma3_reachable() === "ok"` | ✅ **partiel**, dit explicitement qu'il manque encore la confirmation par la sonde | poule-et-œuf : la sonde vient de l'étape suivante (l'install du plugin) |
-| Sonde pas active, `ma3_reachable() === "muet"` | ⚠️ MA3 tourne mais n'écoute pas | idem |
-| MA3 pas lancé | ○ invite à le lancer | `ma3_reachable() === "off"` |
+| Sonde active, ligne 8000 confirmée (Receive + Receive Command) | vert — preuve complète (`oscOkFull`) | `osc_config_ma3()`, la sonde tourne DANS MA3 |
+| Sonde pas encore active, mais `ma3_reachable() === "ok"` | vert — preuve **partielle** (`oscPret`) : le carton ne distingue pas ce cas de la preuve complète | poule-et-œuf : la sonde vient de l'étape suivante (l'install du plugin) |
+| Sonde pas active, `ma3_reachable() === "muet"` | rouge : « L'OSC n'est pas encore confirmé » + aide OSC | idem |
+| MA3 pas lancé | rouge : « grandMA3 ne répond pas » | `ma3_reachable() === "off"` |
 
-Une fois le plugin installé et actif, une étape « Envoie les raccourcis
-clavier vers grandMA3 » apparaît (capture d'écran réelle du bouton
-`#btnShcuts`, encadrée), puis une étape finale « Tout est configuré » —
-visible seulement quand les TROIS conditions réelles sont vraies (OSC
-confirmé par la sonde, plugin actif, raccourcis déjà envoyés au moins une
-fois) — avec un bouton vers l'onglet Bridge qui ne déclenche PAS
-`toggleBridge()` : démarrer reste un geste de l'utilisateur. Tout ça est
-recalculé à CHAQUE poll (400 ms) à partir de l'état réel, pas déclenché une
-fois pour toutes : revenir sur l'assistant après avoir déjà tout fait montre
-directement les bonnes coches. Vérifié en réel, les deux sens (parcours à
-froid OSC coupé → activé, et retour sur l'onglet après coup).
+Les cartons Plugin (Installer / Relancer), Raccourcis clavier (envoi des
+raccourcis, Accessibilité) et Sauvegarde / Démarrage (`allerDemarrerBridge()`,
+qui démarre réellement le bridge) suivent. Tout est recalculé à CHAQUE poll
+(400 ms) à partir de l'état réel, pas déclenché une fois pour toutes. Le
+contrôle de non-retour de l'ancien fil est dans `smoke_ma3_sync.py`
+(`test_plugin_install`). Les passages décrits ici (« vérifié en réel, les deux
+sens ») portaient sur l'ancien fil A à E ; la Mise en route n'a pas été
+revérifiée en réel sur ce point : non vérifié.
 
-Voir aussi `docs/KEYBOARD_MAPPING.md` pour l'étape « Envoie les raccourcis »
+Voir aussi `docs/KEYBOARD_MAPPING.md` pour le carton « Raccourcis clavier »
 et l'horodatage du dernier envoi.

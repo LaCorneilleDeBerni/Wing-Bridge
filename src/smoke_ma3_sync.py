@@ -883,57 +883,59 @@ def test_plugin_install(wm3):
     finally:
         (wm3.ma3_reachable, wm3._plugin_source_dir, wm3._ma3_base, etat.E.OSC) = sauve
 
-    # ── Fin de wizard de capture : aiguillage « où sera utilisé Wing Bridge » ──
-    # Après la phase 7, l'assistant demande la plateforme AVANT l'invitation
-    # « vérifie ta wing » :
-    #   • « ici »  → ferme juste l'aiguillage, le fil standard A→E (#oscEtape /
-    #                #pluginEtape) prend le relais tout seul au poll suivant.
-    #   • « mac »  → propose l'export du .bin, PAS d'install de plugin ici.
-    # 🐛 Avant (19/09/2026, test réel) : la branche « ici » ouvrait son PROPRE
-    # panneau d'installation (#fwAiguillageIci, fwAiguillageInstaller()) —
-    # dupliqué de l'Étape B, hors barre A→E, et sans attendre l'étape A (OSC).
-    # Retiré : un seul chemin d'installation (#pluginEtape / pluginInstaller()).
-    # Réinjection : réintroduire un second panneau/appel /api/plugin/install
-    # fait retomber ce contrôle.
+    # ── Ancien fil A–E et aiguillage de fin de capture : RETIRÉS (passage 2b) ──
+    # L'assistant unique « Mise en route » (7 cartons) a remplacé le fil en cinq
+    # étapes A à E (OSC, Plugin, Vérifier, Raccourcis, Terminé) et l'aiguillage
+    # « où sera utilisé Wing Bridge ? ». Ce contrôle garantit que ce second
+    # chemin ne REVIENT pas : un seul chemin d'installation du plugin
+    # (pluginInstaller(), appelé par le carton « Plugin ») et aucun id / aucune
+    # fonction de l'ancien fil dans le balisage ni dans le JavaScript.
+    # 🐛 Historique : le 19/09/2026 un panneau d'installation DUPLIQUÉ (hors
+    # fil, sans attendre l'OSC) avait déjà existé : c'est ce qu'on surveille.
+    # Réinjection : remettre un de ces ids ou fonctions fait retomber ce contrôle.
     html = core.HTML
     js = _js_de(html)
     manques = []
-    if 'id="fwCaptureAiguillage"' not in html:
-        manques.append("encart #fwCaptureAiguillage absent du balisage")
-    if "fwAiguillage('ici')" not in html or "fwAiguillage('mac')" not in html:
-        manques.append("les deux branches (ici / mac) ne sont pas toutes deux câblées")
-    if 'id="fwAiguillageMac"' not in html or "fwExport()" not in html:
-        manques.append("branche « mac » sans bouton d'export du firmware")
-    if 'id="fwAiguillageIci"' in html or "fwAiguillageInstaller" in js:
-        manques.append("le panneau dupliqué « ici » (#fwAiguillageIci / "
-                        "fwAiguillageInstaller()) est revenu — l'Étape B "
-                        "(#pluginEtape) doit rester le seul chemin d'install")
-    # « ici » : un seul geste, fermer l'aiguillage — pas un second appel serveur.
-    fa = re.search(r"function fwAiguillage\(cible\)\s*\{.*?\n\}", js, re.S)
-    if not fa:
-        manques.append("fwAiguillage(cible) non définie")
-    elif "/api/plugin/install" in fa.group(0):
-        manques.append("fwAiguillage() appelle encore /api/plugin/install "
-                        "(devrait revenir à #pluginEtape)")
-    # L'avertissement SaveShow doit survivre au retrait du panneau — déplacé
-    # dans la vraie Étape B (#pluginEtape) pour ne pas perdre l'info.
-    if "enregistrera ton show" not in html:
-        manques.append("avertissement « enregistrera ton show » disparu "
-                        "(devrait être dans #pluginEtape)")
-    pe = re.search(r'id="pluginEtape".*?id="fwCaptureSuite"', html, re.S)
-    if pe and "enregistrera ton show" not in pe.group(0):
-        manques.append("l'avertissement « enregistrera ton show » n'est pas "
-                        "dans #pluginEtape")
-    # L'aiguillage doit précéder #fwCaptureSuite dans majCapture (succès).
-    mc = re.search(r"function majCapture\b.*?\n\}", js, re.S)
-    if mc and "fwCaptureAiguillage" not in mc.group(0):
-        manques.append("majCapture() ne déclenche pas l'aiguillage sur succès")
+    interdits = (
+        # balisage
+        "mercPillA", "mercPillB", "mercPillC", "mercPillD", "mercPillE",
+        "mercWizStepbar", "oscEtape", "pluginEtape", "pluginInstallBtn",
+        "fwCaptureSuite", "fwCaptureAiguillage", "fwAiguillageMac",
+        "miseEnRouteTerminee", "miseEnRouteFinale", "etapeCBloc",
+        "etapeDRaccourcis", "finalBloqueOsc", "btnShcutsWizard",
+        "shcutsEtapeEtat", "accessEtapeMac", "sauvegardeWizardMsg",
+        "pluginStatutTxtC", "wizRelancerBtn",
+        # fonctions et drapeaux
+        "etapeCSuivante", "etapeDSuivante", "etapePrecedente",
+        "_etapeCPasseeManuel", "_etapeDPasseeManuel", "majMiseEnRouteSuite",
+        "majOscEtape", "shcutsEnvoyerWizard", "fwAiguillage",
+        "relancerPluginWizard", "_pluginStatutLigne", "_mercWizStepbar",
+    )
+    for mot in interdits:
+        if mot in html or mot in js:
+            manques.append(mot)
     if manques:
-        echec("aiguillage de fin de wizard incomplet", " ; ".join(manques))
+        echec("l'ancien fil A-E est revenu (ids / fonctions supprimés présents)",
+              ", ".join(manques))
     else:
-        ok("fin de wizard : aiguillage ici/Mac — « ici » referme et rend la "
-           "main au fil standard A→E (pas de second chemin d'install), "
-           "« Mac » exporte le .bin, avertissement SaveShow dans l'Étape B")
+        ok("ancien fil A-E et aiguillage : aucun id ni aucune fonction "
+           "n'est revenu (%d noms surveillés)" % len(interdits))
+    # Un seul chemin d'installation du plugin côté interface.
+    if js.count("/api/plugin/install") != 1:
+        echec("l'installation du plugin a plusieurs chemins côté interface",
+              "%d appels à /api/plugin/install (attendu : 1, dans pluginInstaller)"
+              % js.count("/api/plugin/install"))
+    else:
+        ok("installation du plugin : un seul chemin (pluginInstaller)")
+    # L'avertissement SaveShow vivait dans l'ancienne étape B : il doit
+    # survivre dans le carton « Plugin » de la Mise en route (fr ET en).
+    import json as _json
+    for lg, motif in (("fr", "enregistre ton show"), ("en", "saves your grandMA3 show")):
+        cat = _json.loads((HERE / "locales" / (lg + ".json")).read_text(encoding="utf-8"))
+        if motif not in cat.get("ui.mr.plugin.slot_avert", ""):
+            echec("avertissement SaveShow absent du carton Plugin (" + lg + ")")
+        else:
+            ok("avertissement SaveShow présent dans le carton Plugin (" + lg + ")")
 
 
 def test_plugin_slot(wm3):

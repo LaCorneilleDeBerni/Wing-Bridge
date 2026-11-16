@@ -760,7 +760,7 @@ def _controle_mise_en_route():
           — pastille = détection réelle (shcuts_horodate + Accessibilité de
           Wing Keyboard ; s.mode === "bridge"), jamais verts sans elle, et leurs
           actions réemploient shcutsEnvoyer / sauvegarderConfigWizard /
-          allerDemarrerBridge de l'ancien fil A-E.
+          allerDemarrerBridge.
     """
     import json
     import re as _re
@@ -992,7 +992,7 @@ process.stdout.write(JSON.stringify(R));
         return
     m_env = _re.search(r"^async function _mrEnvoyerRaccourcis\(\) \{.*?^\}", js, _re.S | _re.M)
     if not m_env or 'shcutsEnvoyer("mrShcutsBtn", "mrShcutsEtat")' not in m_env.group(0):
-        echec("(6g) _mrEnvoyerRaccourcis doit appeler shcutsEnvoyer (même envoi que l'ancienne étape D)")
+        echec("(6g) _mrEnvoyerRaccourcis doit appeler shcutsEnvoyer (même envoi que le bouton de l'onglet Touches)")
         return
     for _id in ("mrShcutsEtat", "mrShcutsBtn"):
         if f'id="{_id}"' not in (HERE / "wing_ui.html").read_text(encoding="utf-8"):
