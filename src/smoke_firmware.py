@@ -734,6 +734,39 @@ def _controle_mise_en_route():
     js = (HERE / "ui" / "parametres.js").read_text(encoding="utf-8")
     fr = json.loads((HERE / "locales" / "fr.json").read_text(encoding="utf-8"))
     en = json.loads((HERE / "locales" / "en.json").read_text(encoding="utf-8"))
+    # (e) La fenêtre doit être VISIBLE : aucun ancêtre de #mrModal / #mrFond ne
+    # doit être masqué en permanence (display:none). Constat de l'auteur
+    # (16/11/2026, build #263) : placée dans #fwCaptureBloc (masqué hors
+    # capture), elle s'ouvrait invisible — « il ne se passe rien ». Les
+    # contrôles sur la logique pure ne pouvaient pas le voir.
+    from html.parser import HTMLParser
+    class _Anc(HTMLParser):
+        VOIDS = {"br", "img", "input", "hr", "meta", "link"}
+        def __init__(self):
+            super().__init__(); self.pile = []; self.cachees = {}
+        def handle_starttag(self, tag, attrs):
+            if tag in self.VOIDS:
+                return
+            a = dict(attrs)
+            self.pile.append((tag, a.get("id"), (a.get("style") or "").replace(" ", "")))
+            if a.get("id") in ("mrModal", "mrFond"):
+                self.cachees[a["id"]] = [i for (_t, i, st) in self.pile[:-1]
+                                         if "display:none" in st]
+        def handle_endtag(self, tag):
+            if tag in self.VOIDS:
+                return
+            for k in range(len(self.pile) - 1, -1, -1):
+                if self.pile[k][0] == tag:
+                    del self.pile[k:]
+                    break
+    _anc = _Anc()
+    _anc.feed((HERE / "wing_ui.html").read_text(encoding="utf-8"))
+    for _id in ("mrModal", "mrFond"):
+        if _id not in _anc.cachees:
+            echec(f"(6e) #{_id} introuvable dans wing_ui.html")
+        elif _anc.cachees[_id]:
+            echec(f"(6e) #{_id} est dans un conteneur masqué ({_anc.cachees[_id]}) : "
+                  "la fenêtre de mise en route s'ouvrirait invisible")
     noms = ("_oscConfigOk", "detectionsMiseEnRoute", "plateformeMiseEnRoute",
             "cartonsMiseEnRoute", "mrSuivantActif")
     morceaux = []

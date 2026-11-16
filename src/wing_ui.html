@@ -1091,6 +1091,23 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
          par majCapture() si s.capture est null (hors Windows x64, module
          absent du build, ou hôte ARM : USBPcap et grandMA2 onPC n'existent
          qu'en x64 — cf. wing_firmware_capture.capture_supportee). -->
+      <!-- ⚠️ HORS de #fwCaptureBloc (masqué hors capture) : sinon la fenêtre est ouverte mais invisible.
+           Assistant de mise en route UNIQUE (chantier 3a) : même fond flou et
+           même gabarit de cartons que la capture. Cartons rendus par
+           assistantMiseEnRouteRendre() (ui/parametres.js) depuis la fonction
+           pure cartonsMiseEnRoute ; rien n'est sauté, rien n'est décidé ici. -->
+      <div id="mrFond" class="fwFond"></div>
+      <div id="mrModal" style="font-size:13px">
+        <div id="mrTitre" style="font-size:16px;font-weight:700;margin-bottom:10px" data-i18n="ui.mr.etape" data-i18n-dynamic>Mise en route, étape {n} sur {total}</div>
+        <ol id="mrCartons" style="list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px"></ol>
+        <div class="toolbar" style="margin-top:10px">
+          <button class="btn" id="mrPrecedentBtn" onclick="assistantMiseEnRoutePrecedent()" style="display:none" data-i18n="ui.mr.precedent">Précédent</button>
+          <button class="btn primary" id="mrSuivantBtn" onclick="assistantMiseEnRouteSuivant()" disabled data-i18n="ui.mr.suivant" data-i18n-dynamic>Suivant</button>
+          <button class="btn" onclick="assistantMiseEnRouteFermer()" data-i18n="ui.mr.fermer">Fermer</button>
+        </div>
+        <div class="muted" style="margin-top:6px;font-size:12px" data-i18n="ui.mr.aide_suivant">Suivant s'active quand l'étape est en place.</div>
+        <div id="mrMsg" style="margin-top:6px;font-size:12.5px"></div>
+      </div>
     <div id="fwCaptureBloc" style="display:none;margin-bottom:14px">
       <div class="toolbar">
         <button class="btn primary" id="fwCaptureBtn" onclick="fwCaptureAmorcer()" data-i18n="ui.param.fw.capturer">📡 Capturer depuis grandMA2 onPC</button>
@@ -1131,22 +1148,6 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
            majCapture() → _fwCaptureCartons() depuis /api/status (s.capture :
            phase, pastilles, etape, suivant_possible, suivant_cle). -->
       <div id="fwCaptureFond" class="fwFond"></div>
-      <!-- Assistant de mise en route UNIQUE (chantier 3a) : même fond flou et
-           même gabarit de cartons que la capture. Cartons rendus par
-           assistantMiseEnRouteRendre() (ui/parametres.js) depuis la fonction
-           pure cartonsMiseEnRoute ; rien n'est sauté, rien n'est décidé ici. -->
-      <div id="mrFond" class="fwFond"></div>
-      <div id="mrModal" style="font-size:13px">
-        <div id="mrTitre" style="font-size:16px;font-weight:700;margin-bottom:10px" data-i18n="ui.mr.etape" data-i18n-dynamic>Mise en route, étape {n} sur {total}</div>
-        <ol id="mrCartons" style="list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px"></ol>
-        <div class="toolbar" style="margin-top:10px">
-          <button class="btn" id="mrPrecedentBtn" onclick="assistantMiseEnRoutePrecedent()" style="display:none" data-i18n="ui.mr.precedent">Précédent</button>
-          <button class="btn primary" id="mrSuivantBtn" onclick="assistantMiseEnRouteSuivant()" disabled data-i18n="ui.mr.suivant" data-i18n-dynamic>Suivant</button>
-          <button class="btn" onclick="assistantMiseEnRouteFermer()" data-i18n="ui.mr.fermer">Fermer</button>
-        </div>
-        <div class="muted" style="margin-top:6px;font-size:12px" data-i18n="ui.mr.aide_suivant">Suivant s'active quand l'étape est en place.</div>
-        <div id="mrMsg" style="margin-top:6px;font-size:12.5px"></div>
-      </div>
       <div id="fwCaptureProgress" style="display:none;font-size:13px;margin-top:8px">
         <!-- Titre du modal « Étape N/7 » : écrit par majCapture() (data-i18n-dynamic),
              vide hors modal. -->
