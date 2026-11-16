@@ -297,6 +297,8 @@ pilote actif, pas une fuite de notre code. Détail mesuré :
 
 ### 2. Capturer — repli manuel (Wireshark)
 
+> UI (17/11/2026) : ce repli est le bloc repliable « Repli manuel », dernier de la carte Firmware (Paramètres), fermé par défaut ; il contient le texte d'aide et les deux boutons d'import (.pcapng, .bin). C'est une solution de repli : le chemin principal est « Mise en route ».
+
 Si la voie intégrée échoue, ou sur une autre plateforme que Windows pour
 **observer** une capture existante (l'extraction elle-même reste Windows x64
 only, voir plus haut) :

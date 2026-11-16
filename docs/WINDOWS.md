@@ -619,7 +619,7 @@ Réessayer / Annuler dans le carton en cours — plus de barre `1/7 … 7/7`.
 **Chantier F (16/11/2026, retours du test réel Asus) — NON testé sur Windows,
 seulement par le contrôle 49 (5a-5e, node + réinjections).** L'assistant s'ouvre
 en **panneau modal « Étape N/7 »** sur fond flou (`.fwFond`, `#fwCaptureProgress.fwModal`,
-décision pure `fwAffichageCapture`) ; il se **ferme** après succès/annulation (reste, non modal, après un échec : pastille rouge + « Réessayer »), le bouton « Capturer » est masqué pendant, et l'import manuel (.pcapng/.bin) est replié derrière « Repli manuel » **seulement si `s.capture` non null** (jamais retiré : seul chemin sur Mac/Linux).
+décision pure `fwAffichageCapture`) ; il se **ferme** après succès/annulation (reste, non modal, après un échec : pastille rouge + « Réessayer »), le bouton « Capturer » est masqué pendant, et l'import manuel (.pcapng/.bin) vit dans UN bloc repliable « Repli manuel » (`<details id="hFirmware">`), fermé par défaut et placé tout à la fin de la carte Firmware, sur tous les systèmes (plus de lien ni de logique d'affichage : le bouton « Capturer » reste, lui, dans `#fwCaptureBloc`).
 Règle `button.btn:disabled` générale ; annulation voulue journalisée `journal.fw.capture_annulee_utilisateur` ; messages « firmware non configuré » → « Capturer » sur Windows x64 (`clesFirmwareManquant`, variantes `_capture`). Les journaux d'init (`journal.init.fw_non_configure`, `wing_init.py`) parlent encore d'import : hors périmètre.
 
 | # | Carton | Pastilles (🟢 quand…) | Ce que le clic « Suivant » déclenche |

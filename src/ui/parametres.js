@@ -170,15 +170,17 @@ function fwEtatCarton(i, cap) {
 
 // Décision PURE de l'affichage de l'assistant (chantier F, 16/11/2026), exécutée
 // telle quelle dans node par le contrôle 49. cap = s.capture (null hors Windows
-// x64). `manuelDeplie` : le lien « Repli manuel » a été cliqué.
+// x64).
+//  - bloc     : #fwCaptureBloc (confirmation, cartons, résultat) n'existe que là
+//    où la capture intégrée existe ;
 //  - modal    : panneau modal « étape N/7 » PENDANT la capture seulement ;
 //  - progress : cartons visibles pendant la capture, et APRÈS un ÉCHEC (pastille
 //    rouge + « Réessayer ») — mais plus après un succès ni une annulation
 //    (avant : le panneau et son « Annuler » restaient jusqu'à F5) ;
 //  - capturer : le bouton « Capturer… » disparaît pendant la capture ;
-//  - manuel   : l'import .pcapng/.bin n'est masqué QUE là où la capture
-//    intégrée existe (cap non null) — ailleurs c'est le seul chemin.
-function fwAffichageCapture(cap, manuelDeplie) {
+//  (les imports .pcapng/.bin n'ont plus de décision d'affichage : ils sont
+//  toujours là, dans le <details> « Repli manuel », dernier de la carte.)
+function fwAffichageCapture(cap) {
   const actif = !!(cap && cap.actif);
   const echec = !!(cap && !cap.actif && cap.phase && cap.ok === false && !cap.annule);
   return {
@@ -186,24 +188,9 @@ function fwAffichageCapture(cap, manuelDeplie) {
     modal: actif,
     progress: actif || echec,
     capturer: !!cap && !actif,
-    manuel: !cap || !!manuelDeplie,
-    lienManuel: !!cap,
   };
 }
-let _fwManuelDeplie = false;
 let _fwCaptureDernier = null;
-function fwManuelBasculer() {
-  _fwManuelDeplie = !_fwManuelDeplie;
-  _fwAppliquerManuel(_fwCaptureDernier);
-}
-function _fwAppliquerManuel(cap) {
-  const a = fwAffichageCapture(cap, _fwManuelDeplie);
-  document.querySelectorAll(".fwManuel").forEach(function (el) {
-    el.style.display = a.manuel ? "" : "none";
-  });
-  const lien = document.getElementById("fwManuelLien");
-  if (lien) lien.style.display = a.lienManuel ? "" : "none";
-}
 
 // Composants de cartons PARTAGÉS entre l'assistant de capture (ci-dessous) et
 // l'assistant de mise en route (assistantMiseEnRoute, plus bas) : mêmes
@@ -743,10 +730,9 @@ function _mercWizStepbar(states) {
 
 function majCapture(cap) {
   _fwCaptureDernier = cap || null;
-  const aff = fwAffichageCapture(cap, _fwManuelDeplie);
+  const aff = fwAffichageCapture(cap);
   const bloc = document.getElementById("fwCaptureBloc");
   if (bloc) bloc.style.display = aff.bloc ? "" : "none";
-  _fwAppliquerManuel(cap);
   if (!cap) {
     const fond0 = document.getElementById("fwCaptureFond");
     if (fond0) fond0.classList.remove("ouvert");
@@ -757,10 +743,10 @@ function majCapture(cap) {
   const progress = document.getElementById("fwCaptureProgress");
   const removeBtn = document.getElementById("fwRemoveCaptureBtn");
 
-  if (btn) { btn.disabled = !!cap.actif; btn.style.display = aff.capturer ? "" : "none"; }
   // Les cartons restent visibles APRÈS la fin (succès, échec, annulation) :
   // c'est là que vivent la pastille rouge qui dit pourquoi et « Réessayer ».
   // Masqués seulement tant qu'aucune capture n'a commencé (phase 0).
+  if (btn) { btn.disabled = !!cap.actif; btn.style.display = aff.capturer ? "" : "none"; }
   if (progress) {
     progress.style.display = aff.progress ? "" : "none";
     progress.classList.toggle("fwModal", aff.modal);

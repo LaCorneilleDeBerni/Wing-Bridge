@@ -28,6 +28,10 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- Firmware card: the two manual imports (`.pcapng` and `.bin`) now live in a single
+  collapsible “Manual fallback” block, closed by default and placed last in the
+  card, on every system. The old discreet “Manual fallback” link and its
+  show/hide logic are gone. The capture button is unchanged.
 - Plugin location in the grandMA3 Plugins pool: the default is now 1 (was 3),
   and the setup assistant's Plugin card shows the field before “Install the
   plugin”, with a note that grandMA3 asks Overwrite, Merge or Cancel when the

@@ -177,8 +177,6 @@ header h1 .ver { color: var(--muted); font-size: 12px; font-weight: 400; }
 .modale .aide-plus[hidden] { display: none; }
 /* Aucun lien bleu souligné dans l'app : le lien « Repli manuel » du panneau
    firmware prend le même style discret que « Plus de détails dans l'Aide ». */
-#fwManuelLien { color: var(--muted); text-decoration: none; cursor: pointer; }
-#fwManuelLien:hover, #fwManuelLien:focus-visible { color: var(--accent); }
 button.aide {
   background: none; border: 1px solid var(--border); color: var(--muted);
   width: 19px; height: 19px; border-radius: 50%; cursor: pointer;
@@ -1317,26 +1315,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
       </div>
     </div>
 
-    <details class="help fwManuel" id="hFirmware"><summary data-i18n="ui.param.fw.hrepli.summary">Repli manuel (Wireshark) — ou une autre plateforme</summary>
-    <div class="hbody" data-i18n-html="ui.param.fw.hrepli.body">
-      Sur un PC <b>Windows x64</b> : installe Wireshark (il propose USBPcap),
-      lance la capture sur l'interface <b>USBPcapN</b> du hub où sera la wing,
-      branche la wing / ouvre grandMA2 onPC (l'upload dure ~2-3 s), arrête et
-      enregistre en <b>.pcapng</b>. Importe ce fichier ci-dessous : si
-      l'empreinte correspond, c'est bon. Sur Mac (ou toute machine qui n'est
-      pas celle où tu captures) : capture une fois sur un PC Windows via le
-      bouton ci-dessus, « 💾 Exporter le firmware » une fois en cache, copie
-      le <code>.bin</code>, puis « 📄 Importer un firmware (.bin) » ici.
-      Détail : docs/HARDWARE.md.
-    </div></details>
-    <!-- Import MANUEL (.pcapng / .bin) : « trop geek » sur Windows x64 → masqué
-         par défaut là (s.capture non null) derrière le lien discret « Repli
-         manuel ». Sur macOS/Linux (s.capture null) c'est le SEUL chemin : il
-         reste affiché, lien masqué (fwAffichageCapture, ui/parametres.js). -->
     <div class="toolbar">
-      <button class="btn fwManuel" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
-      <button class="btn fwManuel" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
-      <a href="#" id="fwManuelLien" class="muted" style="display:none;font-size:12px" onclick="fwManuelBasculer(); return false;" data-i18n="ui.param.fw.manuel_lien">Repli manuel</a>
       <button class="btn primary" onclick="assistantMiseEnRouteOuvrir()" data-i18n="ui.mr.ouvrir">Mise en route</button>
       <button class="btn" id="fwExportBtn" onclick="fwExport()" style="display:none" data-i18n="ui.param.fw.export_btn">💾 Exporter le firmware</button>
       <span class="muted" id="fwMsg" style="font-size:12.5px"></span>
@@ -1623,6 +1602,32 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
         </div>
       </div>
     </div>
+
+    <!-- REPLI MANUEL — TOUT DERNIER de la carte Firmware, fermé par défaut.
+         Une solution de repli, rien d'autre : le chemin principal est le
+         bouton « Mise en route » plus haut. Il contient le deux imports
+         manuels (.pcapng, .bin), présents sur tous les systèmes. Le bouton de
+         capture intégrée (#fwCaptureBtn, Windows x64) reste, lui, dans
+         #fwCaptureBloc, plus haut dans la carte. -->
+    <details class="help" id="hFirmware" style="margin-top:16px"><summary data-i18n="ui.param.fw.hrepli.summary">Repli manuel</summary>
+    <div class="hbody" data-i18n-html="ui.param.fw.hrepli.body">
+      À n'utiliser que si la « Mise en route » ne suffit pas. Sur un PC
+      <b>Windows x64</b>, le bouton « 📡 Capturer depuis grandMA2 onPC » (plus
+      haut dans cette carte) fait la capture à ta place. Sinon, installe
+      Wireshark (il propose USBPcap), lance la capture sur l'interface
+      <b>USBPcapN</b> du hub où sera la wing, branche la wing / ouvre grandMA2
+      onPC (l'upload dure ~2-3 s), arrête et enregistre en <b>.pcapng</b>, puis
+      importe ce fichier ci-dessous : si l'empreinte correspond, c'est bon. Sur
+      Mac (ou toute machine qui n'est pas celle où tu captures) : capture une
+      fois sur un PC Windows, « 💾 Exporter le firmware » une fois en cache,
+      copie le <code>.bin</code>, puis « 📄 Importer un firmware (.bin) »
+      ci-dessous. Détail : docs/HARDWARE.md.
+    </div>
+    <div class="toolbar" style="margin-top:8px">
+      <button class="btn" onclick="fwImportCapture()" data-i18n="ui.param.fw.import_capture">📥 Importer une capture (.pcapng)</button>
+      <button class="btn" onclick="fwImportBin()" data-i18n="ui.param.fw.import_bin">📄 Importer un firmware (.bin)</button>
+    </div>
+    </details>
   </div>
 
   <!-- ═══ Zone de désinstallation — TOUT À LA FIN, visuellement à part ═══

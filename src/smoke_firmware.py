@@ -598,7 +598,7 @@ def _controle_chantier_f(fwc):
       (b) le panneau se FERME dès que actif=false sans échec à montrer
           (succès, annulation) ; modal seulement pendant la capture ; le bouton
           « Capturer » disparaît pendant ;
-      (c) l'import manuel n'est masqué QUE si s.capture est non null ;
+      (c) un seul bloc « Repli manuel », dernier de la carte, avec les deux imports ;
       (d) une annulation voulue a sa clé de journal, distincte de l'échec ;
       (e) « firmware manquant » renvoie vers « Capturer » si s.capture non null,
           vers l'import sinon — et toutes les clés existent en fr ET en en.
@@ -641,7 +641,7 @@ def _controle_chantier_f(fwc):
             break
         except Exception:
             continue
-    m_aff = _re.search(r"^function fwAffichageCapture\(cap, manuelDeplie\) \{.*?^\}", js, _re.S | _re.M)
+    m_aff = _re.search(r"^function fwAffichageCapture\(cap\) \{.*?^\}", js, _re.S | _re.M)
     m_cles = _re.search(r"^function clesFirmwareManquant\(s\) \{.*?^\}", jsb, _re.S | _re.M)
     if not m_aff or not m_cles:
         echec("(5) fwAffichageCapture / clesFirmwareManquant introuvables")
@@ -658,9 +658,8 @@ const cas = {
   neuf:    {actif: false, phase: 0, ok: null},
 };
 const R = {};
-for (const k in cas) R[k] = fwAffichageCapture(cas[k], false);
-R.nul = fwAffichageCapture(null, false);
-R.deplie = fwAffichageCapture(cas.neuf, true);
+for (const k in cas) R[k] = fwAffichageCapture(cas[k]);
+R.nul = fwAffichageCapture(null);
 const fw = {configure: false};
 R.cles = {
   win_sans: clesFirmwareManquant({firmware: fw, wing: false, capture: {}}),
@@ -683,15 +682,42 @@ process.stdout.write(JSON.stringify(R));""")
     else:
         ok("(5b) panneau modal pendant la capture seulement ; fermé après succès/annulation, "
            "gardé (non modal) après échec ; « Capturer » masqué pendant (node)")
-    if R["nul"]["manuel"] is not True or R["nul"]["lienManuel"] is not False:
-        echec("(5c) s.capture null (macOS/Linux) : l'import manuel DOIT rester affiché", repr(R["nul"]))
-    elif R["neuf"]["manuel"] is not False or R["neuf"]["lienManuel"] is not True \
-            or R["deplie"]["manuel"] is not True:
-        echec("(5c) s.capture non null : import manuel masqué par défaut, dépliable par le lien",
-              repr((R["neuf"], R["deplie"])))
+    # (c) repli manuel : UN bloc repliable, DERNIER de la carte Firmware, qui
+    # contient le bouton de capture et les deux imports ; le bouton de capture
+    # n'est visible que si la capture intégrée existe (s.capture non null).
+    carte = html[html.index('id="firmwareCard"'):html.index("<!-- ═══ Zone de désinstallation")]
+    m_rep = _re.search(r'<details class="help" id="hFirmware"[^>]*>.*?</details>', carte, _re.S)
+    defauts_c = []
+    if not m_rep:
+        defauts_c.append("le bloc <details id=\"hFirmware\"> (repli manuel) est introuvable")
     else:
-        ok("(5c) import manuel : masqué par défaut si s.capture non null (dépliable), "
-           "affiché si null (node)")
+        rep_ = m_rep.group(0)
+        apres = carte[m_rep.end():]
+        if _re.sub(r"\s", "", _re.sub(r"<!--.*?-->", "", apres, flags=_re.S)) != "</div>":
+            defauts_c.append("le repli manuel n'est pas le DERNIER élément de la carte Firmware")
+        if " open" in m_rep.group(0).split(">")[0]:
+            defauts_c.append("le repli manuel doit être fermé par défaut")
+        for besoin in ('onclick="fwImportCapture()"', 'onclick="fwImportBin()"'):
+            if besoin not in rep_:
+                defauts_c.append(f"{besoin} n'est plus dans le repli manuel")
+        if 'id="fwCaptureBtn"' in rep_:
+            defauts_c.append("le bouton de capture est entré dans le repli : il doit rester dans #fwCaptureBloc")
+        if carte.count('onclick="fwImportBin()"') != 1 or carte.count('onclick="fwImportCapture()"') != 1:
+            defauts_c.append("un bouton d'import existe en double dans la carte")
+        m_bloc = _re.search(r'<div id="fwCaptureBloc".*?<div id="fwCaptureConfirm"', carte, _re.S)
+        if not m_bloc or 'id="fwCaptureBtn"' not in m_bloc.group(0):
+            defauts_c.append("#fwCaptureBtn n'est plus en tête de #fwCaptureBloc")
+    if "fwManuel" in html or "fwManuel" in js or "manuel_lien" in html or "manuel_lien" in fr or "manuel_lien" in en:
+        defauts_c.append("l'ancien mécanisme (lien « Repli manuel », classe .fwManuel) est revenu")
+    if R["nul"]["capturer"] is not False or R["nul"]["bloc"] is not False:
+        defauts_c.append(f"s.capture null (macOS/Linux) : bouton de capture masqué attendu {R['nul']!r}")
+    if R["neuf"]["capturer"] is not True or R["actif"]["capturer"] is not False:
+        defauts_c.append(f"s.capture non null : bouton de capture visible hors capture, masqué pendant {R['neuf']!r}")
+    if defauts_c:
+        echec("(5c) repli manuel : " + " ; ".join(defauts_c))
+    else:
+        ok("(5c) repli manuel : <details> fermé, DERNIER de la carte, contenant les deux imports ; "
+           "capture restée dans #fwCaptureBloc, visible seulement si s.capture non null (node)")
     c = R["cles"]
     attendu = {
         "win_sans": ("ui.sante.wing.fw_manque_capture", "ui.bridge.fw_banniere.txt_capture"),

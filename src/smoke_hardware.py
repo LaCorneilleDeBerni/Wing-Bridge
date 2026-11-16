@@ -644,11 +644,12 @@ def _exclusion_apprentissage_guide():
     # Pas d'infobulle de survol sur UN seul des deux boutons (constat de
     # l'auteur : « ça explique un mode mais pas l'autre ») : l'explication vit
     # dans le « ? ».
-    # Aucun lien bleu souligné dans l'app : « Repli manuel » est stylé comme le
-    # reste (constat de l'auteur, 16/11/2026).
-    if not re.search(r"#fwManuelLien\s*\{[^}]*text-decoration:\s*none", html):
-        defauts.append("le lien « Repli manuel » (#fwManuelLien) n'est plus stylé : "
-                       "il redeviendrait un lien bleu souligné")
+    # Aucun lien bleu souligné dans l'app : « Repli manuel » est un <details>
+    # (style details.help), plus un lien — l'ancien <a id="fwManuelLien"> ne
+    # doit pas revenir (constat de l'auteur, 16/11/2026).
+    if "fwManuelLien" in html:
+        defauts.append("le lien « Repli manuel » (#fwManuelLien) est revenu : "
+                       "le repli est un <details>, pas un lien bleu souligné")
     for bid in ("learnBtn", "btnAssistant"):
         m_b = re.search(r'<button[^>]*id="' + bid + r'"[^>]*>', html)
         if not m_b or " title=" in m_b.group(0) or "data-i18n-title" in m_b.group(0):
