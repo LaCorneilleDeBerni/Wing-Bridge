@@ -697,13 +697,16 @@ process.stdout.write(JSON.stringify(R));""")
             defauts_c.append("le repli manuel n'est pas le DERNIER élément de la carte Firmware")
         if " open" in m_rep.group(0).split(">")[0]:
             defauts_c.append("le repli manuel doit être fermé par défaut")
-        for besoin in ('onclick="fwImportCapture()"', 'onclick="fwImportBin()"'):
+        for besoin in ('onclick="fwImportCapture()"',):
             if besoin not in rep_:
                 defauts_c.append(f"{besoin} n'est plus dans le repli manuel")
         if 'id="fwCaptureBtn"' in rep_:
             defauts_c.append("le bouton de capture est entré dans le repli : il doit rester dans #fwCaptureBloc")
-        if carte.count('onclick="fwImportBin()"') != 1 or carte.count('onclick="fwImportCapture()"') != 1:
-            defauts_c.append("un bouton d'import existe en double dans la carte")
+        if carte.count('onclick="fwImportCapture()"') != 1:
+            defauts_c.append("le bouton d'import .pcapng existe en double dans la carte")
+        if 'fwImportBin()' in carte:
+            defauts_c.append("le bouton « Importer un firmware (.bin) » est revenu dans la carte : "
+                             "l'import .bin passe par la Mise en route")
         m_bloc = _re.search(r'<div id="fwCaptureBloc".*?<div id="fwCaptureConfirm"', carte, _re.S)
         if not m_bloc or 'id="fwCaptureBtn"' not in m_bloc.group(0):
             defauts_c.append("#fwCaptureBtn n'est plus en tête de #fwCaptureBloc")
