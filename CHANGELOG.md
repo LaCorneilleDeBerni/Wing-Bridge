@@ -9,6 +9,11 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- Keys tab, “Keyboard shortcuts to MA3” card: trimmed down. No more key counts
+  (they meant nothing from one wing or machine to another) and shorter status
+  messages. The “?” windows of this tab (shortcuts, Accessibility, shortcut
+  conflict) now show a short summary with a “More details in Help” link that
+  opens the matching section of the Help page, where the full text lives.
 - Keys tab: the long introduction block (which described the app's former
   behaviour) is gone. Each mode (learning, guided setup) now has a small “?”
   button that unfolds a short summary of what it does.

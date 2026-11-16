@@ -169,6 +169,8 @@ header h1 .ver { color: var(--muted); font-size: 12px; font-weight: 400; }
 .reglage label { display: flex; align-items: center; gap: 8px;
   color: var(--muted); font-size: 13.5px; cursor: pointer; }
 
+.modale .aide-plus { padding: 0 22px 16px; font-size: 13px; }
+.modale .aide-plus[hidden] { display: none; }
 button.aide {
   background: none; border: 1px solid var(--border); color: var(--muted);
   width: 19px; height: 19px; border-radius: 50%; cursor: pointer;
@@ -640,9 +642,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
   <div class="card">
     <h2 data-i18n="ui.touches.rac.titre">Raccourcis clavier vers MA3</h2>
     <div class="muted" style="font-size:13px;margin-bottom:10px">
-      <span data-i18n-html="ui.touches.rac.txt">Une partie des touches passe par le clavier plutôt que par l'OSC. Pour
-      qu'elles arrivent, l'app et MA3 doivent être d'accord sur
-      <b>quelle frappe fait quoi</b>.</span>
+      <span data-i18n-html="ui.touches.rac.txt">Certaines touches passent par le clavier plutôt que par l'OSC : l'app et MA3 doivent s'accorder sur <b>quelle frappe fait quoi</b>.</span>
       <button class="aide" onclick="aide('raccourcis')" data-i18n-title="ui.commun.en_savoir_plus" title="En savoir plus">?</button>
     </div>
     <div class="toolbar">
@@ -669,11 +669,7 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
          un réglage qu'on ne voit pas. -->
     <div style="margin-top:16px">
       <h2 style="margin-bottom:6px"><span id="titreAutresRac" data-i18n="ui.touches.rac.autres_titre">Autres raccourcis</span></h2>
-      <div class="muted" style="font-size:12.5px;margin-bottom:10px" data-i18n-html="ui.touches.rac.autres_txt">
-        Ces touches existent dans MA3 mais <b>aucun bouton de ta wing</b> ne les
-        utilise — chaque exemplaire est différent, et une touche absente chez toi
-        peut exister ailleurs. Elles sont quand même <b>envoyées à MA3</b>.
-      </div>
+      <div class="muted" style="font-size:12.5px;margin-bottom:10px" data-i18n-html="ui.touches.rac.autres_txt">Ces touches de MA3 n'ont pas de bouton sur ta wing. Elles sont <b>envoyées</b> comme les autres.</div>
         <div id="consoleKeys" style="margin-top:12px; display:grid;
              grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:8px"></div>
     </div>
@@ -1731,6 +1727,9 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
     <header><h3 id="aideTitre" data-i18n="ui.modale.aide.titre">Aide</h3>
       <button class="btn" onclick="fermerAide()" data-i18n="ui.modale.aide.fermer">Fermer</button></header>
     <div class="corps" id="aideCorps"></div>
+    <!-- Lien vers la page Aide : visible seulement quand la fenêtre affiche la
+         version COURTE d'une rubrique (clé aide.<sujet>.court). -->
+    <div class="aide-plus" id="aidePlus" hidden><a href="#" onclick="aideVoirPlus(); return false" data-i18n="ui.modale.aide.plus">Plus de détails dans l'Aide</a></div>
   </div>
 </div>
 

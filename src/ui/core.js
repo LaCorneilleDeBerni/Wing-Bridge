@@ -209,8 +209,36 @@ function aide(cle) {
   if (typeof AIDES_SUJETS === "undefined" || !AIDES_SUJETS.has(cle)) return;
   // rubrique inconnue : on n'invente pas
   document.getElementById("aideTitre").textContent = t("aide." + cle + ".titre");
-  document.getElementById("aideCorps").innerHTML = tHtml("aide." + cle + ".html");
+  // 🔑 Version COURTE si la rubrique en a une (`aide.<sujet>.court`) : la
+  // fenêtre reste lisible d'un coup d'œil, et un lien envoie vers la page
+  // Aide, qui porte le détail (`.html`). Sans `.court`, comportement d'avant :
+  // le texte complet dans la fenêtre, pas de lien.
+  const kc = "aide." + cle + ".court";
+  const court = t(kc) !== kc;       // t() rend la clé elle-même si elle manque
+  document.getElementById("aideCorps").innerHTML = court
+    ? "<p>" + esc(t(kc)) + "</p>" : tHtml("aide." + cle + ".html");
+  const lien = document.getElementById("aidePlus");
+  if (lien) lien.hidden = !court;
+  _aideOuverte = cle;
   document.getElementById("voileAide").classList.add("ouvert");
+}
+
+let _aideOuverte = null;
+
+// Lien « Plus de détails dans l'Aide » : ferme la fenêtre, ouvre l'onglet Aide,
+// déplie la rubrique et fait défiler jusqu'à elle.
+function aideVoirPlus() {
+  const cle = _aideOuverte;
+  fermerAide();
+  const b = document.querySelector('nav button[data-tab="aide"]');
+  if (b) b.click();
+  if (!cle) return;
+  setTimeout(() => {
+    const d = document.getElementById("aide-rubrique-" + cle);
+    if (!d) return;
+    d.open = true;
+    d.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 60);
 }
 
 // Fermeture : bouton, clic sur le voile, ou Échap. Une fenêtre qu'on ne sait
@@ -233,10 +261,12 @@ function construireAide() {
   const box = document.getElementById("aideSommaire");
   if (!box || typeof AIDES_PAR_ONGLET === "undefined") return;
   let html = "";
+  const ordre = [];   // une rubrique par <details>, dans l'ordre : sert à leur poser un id
   AIDES_PAR_ONGLET.forEach(([ongletCle, cles]) => {
     html += "<div class='card'><h2>" + t(ongletCle) + "</h2>";
     cles.forEach(cle => {
       if (!AIDES_SUJETS.has(cle)) return;   // rubrique absente : on n'invente pas
+      ordre.push(cle);
       html += "<details class='help'><summary>" + t("aide." + cle + ".titre")
             + "</summary>"
             + "<div class='hbody corps'>" + tHtml("aide." + cle + ".html")
@@ -245,4 +275,6 @@ function construireAide() {
     html += "</div>";
   });
   box.innerHTML = html;
+  // Ancre pour le lien « Plus de détails dans l'Aide » (aideVoirPlus).
+  box.querySelectorAll("details.help").forEach((d, i) => { d.id = "aide-rubrique-" + ordre[i]; });
 }

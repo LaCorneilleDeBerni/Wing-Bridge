@@ -233,12 +233,8 @@ function renderConsoleKeys() {
     el.appendChild(d);
   });
 
-  const titre = document.getElementById("titreAutresRac");
-  if (titre) {
-    titre.textContent = restants.length
-      ? plural("ui.touches.rac.autres_n", restants.length)
-      : t("ui.touches.rac.autres_toutes");
-  }
+  // Le titre « Autres raccourcis » est fixe (balisage) : aucun compteur, il
+  // n'aurait aucun sens d'une wing et d'une machine à l'autre.
   // ⚠️ Une grille vide doit DIRE pourquoi. Vide + silencieuse, on croit à une
   //    panne — signalé deux fois.
   if (!restants.length && !Object.keys(keys).length) {
@@ -289,7 +285,6 @@ async function shcutsRafraichir(btnId = "btnShcuts", txtId = "shcutsEtat") {
   // Assign mis sur Ctrl+Alt+F, déjà attribué à SelectFixtures.
   if ((d.collisions || []).length) {
     z.innerHTML = tHtml("ui.touches.rac.collision_msg", {
-      n: d.collisions.length,
       // brut() : la liste est du HTML déjà construit (et échappé) par tHtml.
       liste: brut(d.collisions.map(c => tHtml("ui.touches.rac.collision_item", {
         touche: c.touche, frappe: c.frappe,
@@ -303,7 +298,6 @@ async function shcutsRafraichir(btnId = "btnShcuts", txtId = "shcutsEtat") {
   // fichier pendant que MA3 gardait l'ancienne valeur.
   if ((d.non_applique || []).length) {
     z.innerHTML = tHtml("ui.touches.rac.non_applique_msg", {
-      n: d.non_applique.length,
       liste: brut(d.non_applique.slice(0, 6).map(x =>
         tHtml("ui.touches.rac.non_applique_item",
               { touche: x.touche, dans_ma3: x.dans_ma3, voulu: x.voulu })
@@ -316,9 +310,8 @@ async function shcutsRafraichir(btnId = "btnShcuts", txtId = "shcutsEtat") {
     // avec la sonde on PROUVE, sans elle on ne fait que relire le fichier que
     // l'app a écrit elle-même. Ne jamais présenter le second comme le premier.
     z.innerHTML = d.sonde
-      ? tHtml("ui.touches.rac.confirme_sonde", { confirmes: d.confirmes })
+      ? tHtml("ui.touches.rac.confirme_sonde")
       : tHtml("ui.touches.rac.rien_a_envoyer", {
-          geres: d.geres, intacts: d.intacts,
           osc_suffix: brut((d.osc && d.osc !== "ok")
             ? tHtml("ui.touches.rac.osc_muet_suffix") : ""),
         });
@@ -327,7 +320,6 @@ async function shcutsRafraichir(btnId = "btnShcuts", txtId = "shcutsEtat") {
     z.innerHTML = tHtml("ui.touches.rac.desactivee");
   } else {
     z.innerHTML = tHtml("ui.touches.rac.ecarts_msg", {
-      n: d.ecarts.length,
       liste: brut(d.ecarts.slice(0, 6).map(e => tHtml("ui.touches.rac.ecart_item",
         { touche: e.touche, ma3: e.ma3 || "—", app: e.app })).join(", ")),
       suite: d.ecarts.length > 6 ? "…" : "",
@@ -359,10 +351,9 @@ async function shcutsEnvoyer(btnId = "btnShcuts", txtId = "shcutsEtat") {
     z.innerHTML = t("ui.touches.rac.rien_a_faire") + z.innerHTML;
     return;
   }
-  const n = (r.commandes || []).length;
   const muet = r.etat && r.etat.osc && r.etat.osc !== "ok";
   if (muet) {
-    z.innerHTML = tHtml("ui.touches.rac.envoi_muet", { n }) + z.innerHTML;
+    z.innerHTML = tHtml("ui.touches.rac.envoi_muet") + z.innerHTML;
     return;
   }
   // ⚠️ On attend que la SONDE confirme dans MA3 plutôt que d'annoncer un
@@ -382,15 +373,14 @@ async function shcutsEnvoyer(btnId = "btnShcuts", txtId = "shcutsEtat") {
       if (!d.sonde) continue;
       refuse = (d.non_applique || []).length > 0;
       if (d.a_jour) {
-        z.innerHTML = tHtml("ui.touches.rac.applique_verifie",
-                            { n, confirmes: d.confirmes });
+        z.innerHTML = tHtml("ui.touches.rac.applique_verifie");
         return;
       }
     }
   } finally { b.disabled = false; }
   await shcutsRafraichir(btnId, txtId);
   if (refuse) return;      // le ⛔ « MA3 n'a pas appliqué » est déjà peint
-  z.innerHTML = tHtml("ui.touches.rac.non_verifie", { n }) + z.innerHTML;
+  z.innerHTML = tHtml("ui.touches.rac.non_verifie") + z.innerHTML;
 }
 
 // Formate l'horodate (epoch, secondes) du dernier ENVOI réussi de

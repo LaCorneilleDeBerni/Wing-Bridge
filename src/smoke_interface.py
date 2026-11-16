@@ -584,6 +584,53 @@ def test_aides_completes(html):
         ok(f"les {len(definies)} rubriques ont leur titre ET leur corps au "
            f"catalogue (fr + en)")
 
+    # ── Version COURTE de la fenêtre + lien vers la page Aide ────────────────
+    # Une rubrique qui a `aide.<sujet>.court` dans UNE langue doit l'avoir dans
+    # les deux, et la fenêtre doit offrir le lien vers la page Aide. Le court
+    # est borné (< 500 car.) : au-delà, ce n'est plus un résumé.
+    courts = sorted({k.split(".")[1] for k in list(fr) + list(en)
+                     if k.startswith("aide.") and k.endswith(".court")})
+    pb = []
+    for sujet in courts:
+        cle = f"aide.{sujet}.court"
+        for lang, cat in (("fr", fr), ("en", en)):
+            if cle not in cat:
+                pb.append(f"{cle} absente de {lang}.json")
+            elif len(cat[cle]) >= 500:
+                pb.append(f"{cle} ({lang}) fait {len(cat[cle])} car. (limite 500)")
+            elif _re.search(r"<|\{", cat[cle]):
+                pb.append(f"{cle} ({lang}) contient du balisage ou un trou")
+        if sujet not in definies:
+            pb.append(f"{cle} : rubrique absente d'AIDES_PAR_ONGLET")
+    if courts and not (
+            'id="aidePlus"' in html and "aideVoirPlus()" in html
+            and "ui.modale.aide.plus" in html
+            and "function aideVoirPlus" in js
+            and "aide-rubrique-" in js):
+        pb.append("la fenêtre d'aide n'offre plus le lien vers la page Aide "
+                  "(#aidePlus / aideVoirPlus / ancre aide-rubrique-)")
+    if "aide.raccourcis.court" not in fr:
+        pb.append("aide.raccourcis.court manque : la carte Raccourcis perd sa "
+                  "version courte")
+    # Aucun chiffre-compteur de touches dans la carte Raccourcis ni son court :
+    # chaque wing et chaque machine diffère, ces nombres ne veulent rien dire.
+    interdits = ("{confirmes}", "{geres}", "{intacts}", "{n}")
+    for lang, cat in (("fr", fr), ("en", en)):
+        for cle, txt in cat.items():
+            if not (cle.startswith("ui.touches.rac.") or cle == "aide.raccourcis.court"):
+                continue
+            if cle.startswith("ui.touches.rac.horodate_"):
+                continue    # ancienneté de l'envoi : un VRAI signal, pas un compte de touches
+            for tr in interdits:
+                if tr in txt:
+                    pb.append(f"{cle} ({lang}) contient {tr}")
+    if pb:
+        echec(f"{len(pb)} défaut(s) sur la version courte / les chiffres de la carte Raccourcis",
+              " ; ".join(pb[:8]))
+    else:
+        ok(f"{len(courts)} rubrique(s) à version courte (< 500 car., fr + en) "
+           f"avec lien vers l'Aide ; carte Raccourcis sans compteur de touches")
+
 
 def test_reglages_sappliquent(html):
     """Un réglage se transmet-il dès la saisie, sans bouton propre à l'onglet ?
