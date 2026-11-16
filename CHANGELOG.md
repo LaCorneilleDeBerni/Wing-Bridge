@@ -9,6 +9,9 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Changed
 
+- Keys tab: the long introduction block (which described the app's former
+  behaviour) is gone. Each mode (learning, guided setup) now has a small “?”
+  button that unfolds a short summary of what it does.
 - Reloading the page while the learning mode is active no longer leaves you on
   the Bridge tab with the wing silently not sending to MA3: the Touches tab
   opens, where the “Stop learning” button is.

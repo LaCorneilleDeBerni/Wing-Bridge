@@ -627,6 +627,18 @@ def _exclusion_apprentissage_guide():
             and "ongletInitialVerifie" in corps_poll):
         defauts.append("poll() n'ouvre plus l'onglet Touches quand la page se "
                        "recharge pendant un apprentissage")
+    # Onglet Touches : plus de pavé d'introduction (il décrivait l'ancien
+    # fonctionnement de l'app) ; chaque mode a son « ? » qui déplie un résumé,
+    # replié par défaut (demande de l'auteur, 16/11/2026).
+    if 'data-i18n-html="ui.touches.intro"' in html:
+        defauts.append("le pavé d'introduction de l'onglet Touches est revenu")
+    for mode in ("apprentissage", "guidee"):
+        if f"basculerAideMode('{mode}')" not in html:
+            defauts.append(f"le « ? » du mode {mode} a disparu")
+        if not re.search(r'id="aideMode_' + mode + r'" style="display:none"', html):
+            defauts.append(f"le résumé du mode {mode} n'est plus replié par défaut")
+    if "function basculerAideMode" not in js:
+        defauts.append("basculerAideMode a disparu de ui/touches.js")
     if 'id="btnAssistant" onclick="assistantBasculer()"' not in html:
         defauts.append("le bouton de l'assistant n'appelle plus assistantBasculer "
                        "(il ne serait plus son propre bouton d'arrêt)")

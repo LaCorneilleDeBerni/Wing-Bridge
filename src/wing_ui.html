@@ -232,7 +232,13 @@ button.btn.big { font-size: 15px; padding: 12px 24px; }
 /* Bouton inactif : grisé, curseur interdit, aucun survol (chantier F, 16/11/2026 :
    « Suivant » bloqué mais resté jaune plein). Placé APRÈS .primary/.green pour
    l'emporter sur leur fond ; vaut pour tous les boutons .btn désactivés. */
-button.btn:disabled, button.btn:disabled:hover {
+.rangee-mode { display:flex; align-items:center; justify-content:center; gap:8px; }
+  .btn-aide { width:26px; height:26px; border-radius:50%; border:1px solid var(--border, #555); background:transparent;
+              color:inherit; font-weight:700; cursor:pointer; padding:0; line-height:1; }
+  .btn-aide:hover { background:rgba(255,255,255,.12); }
+  .aide-mode { margin:8px auto; max-width:640px; padding:8px 12px; border-radius:6px;
+               background:rgba(255,255,255,.06); font-size:13px; line-height:1.45; }
+  button.btn:disabled, button.btn:disabled:hover {
   opacity: .4; cursor: not-allowed; filter: grayscale(.85);
   border-color: var(--border);
 }
@@ -556,26 +562,12 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
 
 <!-- ═══ TOUCHES ═══ -->
 <section id="tab-touches">
-  <div class="intro" data-i18n-html="ui.touches.intro">
-    <span class="t">🔘 Touches — assigner les boutons</span>
-    Décide ce que fait chaque bouton de la wing. Clique <b>Mode apprentissage</b>,
-    appuie sur un bouton physique, et donne-lui une commande MA3
-    (ex. <b>Store</b>, <b>Fixture</b>). Pour un executor, choisis <b>Executor
-    2-rôles</b> puis la <b>Fonction</b> réellement assignée à cet executor dans
-    MA3 — <b>Go+</b>, <b>Toggle</b>, <b>Flash</b>, <b>Swap</b>… (Go+ n'est pas
-    la seule syntaxe, contrairement à ce que l'app faisait avant : chaque
-    executor peut avoir sa propre fonction). <b>Flash / Temp / Swap</b> sont
-    <b>maintenus</b> (actifs tant que le bouton reste enfoncé, coupés au
-    relâchement) — les autres sont des coups uniques. Les assignations sont
-    enregistrées dans le profil courant.<br><br>
-    <b>Double-appui</b> : une commande MA3 supplémentaire, envoyée deux appuis
-    rapprochés sur la même touche (ex. <b>Menu</b> ×2 → <b>SaveShow</b>).
-    ⚠️ Ce champ attend un <b>mot-clé MA3 complet</b> (« SaveShow », « Highlight »,
-    « Hi »…), <b>pas une frappe clavier</b> — contrairement à la colonne
-    « Raccourci clavier » juste à côté, qui elle attend une touche (« H », « F5 »…).
-  </div>
   <div class="learnzone" id="learnZone">
+    <div class="rangee-mode">
     <button class="btn big primary" id="learnBtn" onclick="toggleLearn()" data-i18n="ui.touches.bouton.apprentissage" data-i18n-dynamic>🎯 Mode apprentissage</button>
+      <button class="btn-aide" onclick="basculerAideMode('apprentissage')" data-i18n-title="ui.touches.aide.tip" title="Explication rapide de ce mode" aria-label="?">?</button>
+    </div>
+    <div class="aide-mode" id="aideMode_apprentissage" style="display:none" data-i18n-html="ui.touches.aide.apprentissage"><b>Mode apprentissage</b> : tu appuies sur une touche de la wing, l'app la reconnaît et te propose de lui donner une commande MA3 (Store, Fixture…) ou un executor. Flash, Temp et Swap restent actifs tant que tu tiens la touche. Pendant ce mode, la wing n'envoie rien à MA3.</div>
     <!-- Les deux façons de configurer une touche, l'une sous l'autre et de
          même taille : ce sont deux chemins équivalents, pas une action
          principale et son option. -->
@@ -584,7 +576,9 @@ pour savoir qui tourne sur quelle version" data-i18n-title="ui.entete.build_tip"
               title="L'app annonce une touche, tu appuies dessus, elle passe à la suivante. Idéal pour configurer une wing de zéro." data-i18n="ui.touches.bouton.guidee" data-i18n-dynamic data-i18n-title="ui.touches.bouton.guidee_tip">
         🪄 Configuration guidée
       </button>
+      <button class="btn-aide" onclick="basculerAideMode('guidee')" data-i18n-title="ui.touches.aide.tip" title="Explication rapide de ce mode" aria-label="?">?</button>
     </div>
+    <div class="aide-mode" id="aideMode_guidee" style="display:none" data-i18n-html="ui.touches.aide.guidee"><b>Configuration guidée</b> : l'app te demande une touche après l'autre, tu appuies dessus sur la wing et elle passe à la suivante. Tu peux passer une touche ou revenir en arrière. Idéal pour configurer une wing de zéro.</div>
     <div class="toolbar" style="margin-bottom:10px;justify-content:center">
       <span class="muted" id="assistantEtat"></span>
     </div>
