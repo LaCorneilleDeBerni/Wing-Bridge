@@ -180,6 +180,15 @@ def _shcuts_vocabulaire(texte: str) -> dict:
     return vocab
 
 
+# Caractère seul → nom MA3, UNIQUEMENT les noms vus dans KeyboardShortCuts.xml
+# (Minus, Period, Slash, Comma, Equal, LeftBracket, RightBracket). Semicolon,
+# Apostrophe et Grave n'y figurent pas : on n'invente rien pour eux.
+_MA3_NOMS_PONCTUATION = {
+    "-": "Minus", ".": "Period", "/": "Slash", ",": "Comma", "=": "Equal",
+    "[": "LeftBracket", "]": "RightBracket",
+}
+
+
 def _shcut_style_ma3(spec: str, vocab: dict) -> str:
     """Réécrit une frappe DANS L'ORTHOGRAPHE DE MA3.
 
@@ -201,6 +210,19 @@ def _shcut_style_ma3(spec: str, vocab: dict) -> str:
     s'applique sans discuter : MAJUSCULE (son fichier d'origine n'a que
     S, U, E, B, H, L, O, Q, C, F, G, P, T, I, A).
     """
+    # 🐛 Un caractère de ponctuation SEUL part sous le NOM de touche que MA3
+    # écrit. Écrit tel quel (« - »), MA3 répond « Illegal value » à la commande
+    # Set KeyboardShortcut (vu sur Windows AZERTY, grandMA3 2.5.1.0) : la touche
+    # restait sur kpSubtract. Noms relevés dans KeyboardShortCuts.xml.
+    nu = str(spec).strip()
+    if nu in _MA3_NOMS_PONCTUATION:
+        return _MA3_NOMS_PONCTUATION[nu]
+    # Défense : « + » seul, découpé sur « + », ne donne que des morceaux vides
+    # donc une frappe VIDE. Dans le flux réel « + » n'arrive pas ici (token
+    # « + » absent de TOKEN_VERS_KEYCODE, jamais envoyé) ; on ne le traduit pas
+    # mais on ne le rend jamais vide.
+    if nu == "+":
+        return "+"
     morceaux = []
     for part in str(spec).split("+"):
         p = part.strip()
@@ -495,7 +517,7 @@ def shcuts_envoyer(force: bool = False) -> dict:
         # filtré au chargement et à la saisie (wm.raccourci_valide), mais ce
         # texte part dans le XML de MA3 ET dans une commande OSC entre
         # guillemets. Un chemin d'entrée oublié ne doit rien pouvoir y glisser.
-        if not wm.raccourci_valide(neuf):
+        if not neuf.strip() or not wm.raccourci_valide(neuf):
             core.log("journal.shcut.frappe_refusee", touche=kc, frappe=neuf[:40])
             return balise
         sc = _RE_ATTR_SC.search(balise)

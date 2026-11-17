@@ -93,7 +93,7 @@ async function loadProfile() {
       const avant = (profile.console_keys || {})[tok] || "";
       const r = await poserRaccourciConsole(tok, e.target.value);
       if (!r.applique) { e.target.value = avant; return; }
-      e.target.value = e.target.value.trim();
+      e.target.value = r.valeur;
       if (r.autre) loadProfile();    // l'autre ligne perd sa frappe : on la redessine
       shcutsRafraichir();            // l'écart avec MA3 change : on le redit
     };

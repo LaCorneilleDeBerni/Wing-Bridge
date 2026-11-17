@@ -229,7 +229,7 @@ function renderConsoleKeys() {
       const avant = (profile.console_keys || {})[tok] || "";
       const r = await poserRaccourciConsole(tok, e.target.value);
       if (!r.applique) { e.target.value = avant; return; }
-      e.target.value = e.target.value.trim();
+      e.target.value = r.valeur;
       if (r.autre) loadProfile();    // l'autre champ perd sa frappe : on le redessine
       shcutsRafraichir();
     };

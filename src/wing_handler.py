@@ -1021,7 +1021,9 @@ class Handler(BaseHTTPRequestHandler):
                      key=str(cle)[:40])
             self._json({"ok": False, "raison": _L("err.raccourci_invalide")})
             return
-        cle = cle.strip()
+        # « - » devient « minus », « . » « period »… (comme la table par
+        # défaut) ; « + » reste « + ». La valeur renvoyée met le champ à jour.
+        cle = wm.nommer_ponctuation(cle.strip())
         remplacer = body.get("remplacer") is True
         # 🔑 Une frappe ne peut porter qu'UNE fonction : MA3 ne saurait pas
         # laquelle déclencher. Conflit sans « remplacer » : on ne change RIEN
@@ -1049,7 +1051,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             core.log("journal.console.raccourci", token=token, key=cle)
         core.mark_dirty()
-        self._json({"ok": True})
+        self._json({"ok": True, "key": cle})
 
             # ⏹ `/api/console/hold` retiré : l'appui long est relayé
             #    pour TOUTES les touches, MA3 décide seul. Plus rien à cocher.

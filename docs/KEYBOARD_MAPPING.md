@@ -408,6 +408,39 @@ pas retirées :
 - en mode console sans raccourci, elles restent sans effet — **limite de MA3,
   pas de l'app**.
 
+## Ponctuation seule : toujours le NOM de la touche (« - » → « minus »)
+
+🐛 Vu sur Windows AZERTY, grandMA3 2.5.1.0 : les boutons « - » (et « . ») ne
+faisaient rien, et MA3 affichait « Command Line — Illegal value : Set
+KeyboardShortcut 136 Property "Shortcut" "…" ». Cause (lue dans le code, puis
+reproduite) : une frappe saisie à la main comme caractère seul (« - ») partait
+telle quelle dans `Set KeyboardShortcut <n> Property "Shortcut" "-"`, que MA3
+refuse ; il attend le NOM de touche de sa table (`Minus`). La table par défaut,
+elle, écrit déjà `minus`, `period`, `slash`.
+
+| Où | Ce qui change |
+|---|---|
+| Saisie (`/api/console/key`, `wm.nommer_ponctuation`) | `- . / , ; = ' [ ] \`` sont enregistrés sous `minus period slash comma semicolon equal apostrophe leftbracket rightbracket grave` ; la route renvoie `key` et l'interface remet cette valeur dans le champ |
+| Envoi (`_shcut_style_ma3`) | un caractère seul part sous le nom MA3 : `Minus Period Slash Comma Equal LeftBracket RightBracket` — **uniquement les noms vus dans `KeyboardShortCuts.xml`**. `;` `'` `` ` `` : aucun nom vu dans ce fichier, donc pas de traduction (comportement inchangé) |
+| Conflit (`normaliser_frappe`) | « - » et « minus » sont la même frappe |
+
+**Ce que l'assistant clavier tape (lecture du code, rien d'exécuté sur Windows) :**
+« minus » est dans `NAMED_VK` (VK 0xBD, position physique, indépendante de la
+disposition) ; un « - » seul n'y est pas et passe par `type_char` →
+`VkKeyScanW`, donc par la touche que la DISPOSITION active associe au
+caractère. Les deux ne sont donc pas garantis identiques. Que la touche
+physique « - » d'AZERTY soit la touche « 6 » (VK 0x36) est une connaissance du
+clavier, **non vérifiée sur la machine**. Enregistrer « minus » aligne ce qui
+est tapé sur ce que MA3 lit (sa table nomme des positions US).
+
+**« + » : pas la cause, traitement inchangé.** Le token « + » n'est pas dans
+`TOKEN_VERS_KEYCODE` ; son KeyCode serait « + », absent de la table de MA3 : il
+n'est jamais envoyé (voir la section suivante). `_shcut_style_ma3("+")`
+renvoyait bien une chaîne vide (« + » coupé sur « + »), mais ce chemin n'est pas
+atteint ; la fonction renvoie désormais « + » (jamais vide), et l'envoi refuse
+toute frappe vide. Traduction de « + » en `Equal` ou `kpAdd` : non vérifié sur
+la console, non faite.
+
 ## Le nom vient de l'ÉTIQUETTE, pas du mot-clé — Exec, SelFix, Highlt
 
 Piège de la même famille que « Focus » → « Focus1 ». Vérifié dans le manuel

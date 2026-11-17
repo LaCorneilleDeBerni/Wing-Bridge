@@ -7,6 +7,20 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Keyboard shortcuts: a lone punctuation character typed by hand (“-”, “.”,
+  “/”…) is now stored under its key name (`minus`, `period`, `slash`…), like
+  the default table, and sent to MA3 under the name its table uses (`Minus`,
+  `Period`, `Slash`, `Comma`, `Equal`, `LeftBracket`, `RightBracket`). Before,
+  “-” was sent as-is and grandMA3 refused it (“Illegal value: Set
+  KeyboardShortcut … Property "Shortcut"”), so the wing's “-” button did
+  nothing. The field shows the converted value; “-” and “minus” count as the
+  same keystroke for the duplicate check. The shortcut help now says to write
+  the key name for punctuation. A keystroke sent to MA3 can no longer be empty.
+  Whether the physical “-” key of an AZERTY layout matches MA3's `Minus`:
+  not verified on the console.
+
 ### Added
 
 - A keystroke can only carry one function: assigning a keyboard shortcut that

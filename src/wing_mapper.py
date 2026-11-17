@@ -124,6 +124,30 @@ _CARACTERES_INTERDITS = set('<>"&\\')
 RACCOURCI_LONGUEUR_MAX = 40
 
 
+# Caractère de ponctuation SEUL → NOM de touche (celui de la table par défaut
+# et de NAMED_VK / NAMED_KEYS). « - » devient « minus » : c'est la touche
+# nommée, en position US, que l'assistant clavier tape pour la frappe par
+# défaut — et le nom que MA3 écrit (« Minus »). « + » n'y figure PAS : le « + »
+# du pavé numérique n'est volontairement pas poussé vers MA3 (voir
+# docs/KEYBOARD_MAPPING.md, « Pourquoi « + » n'est pas dans TOKEN_VERS_KEYCODE »).
+PONCTUATION_VERS_NOM = {
+    "-": "minus", ".": "period", "/": "slash", ",": "comma", ";": "semicolon",
+    "=": "equal", "'": "apostrophe", "[": "leftbracket", "]": "rightbracket",
+    "`": "grave",
+}
+
+
+def nommer_ponctuation(spec):
+    """« - » → « minus », « . » → « period »… ; tout le reste inchangé.
+
+    Seul un caractère de ponctuation ISOLÉ est traduit : « Ctrl+- » et les
+    touches déjà nommées ne bougent pas.
+    """
+    if isinstance(spec, str):
+        return PONCTUATION_VERS_NOM.get(spec.strip(), spec)
+    return spec
+
+
 def raccourci_valide(spec) -> bool:
     """La frappe `spec` est-elle sûre ET tapable ? "" (désassignée) l'est."""
     if not isinstance(spec, str):
@@ -167,7 +191,7 @@ def normaliser_frappe(spec) -> str:
     if s == "":
         return ""
     if len(s) == 1:                    # « + » seul : pas un séparateur
-        return s
+        return PONCTUATION_VERS_NOM.get(s, s)    # « - » et « minus » : même frappe
     parts = [p.strip() for p in s.split("+")]
     *mods, base = parts
     mods = sorted({_ALIAS_MODIFICATEURS.get(m, m) for m in mods if m})

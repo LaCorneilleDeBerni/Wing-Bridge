@@ -106,6 +106,8 @@ def _controle_conflit_saisie(wm, ui):
         mauvais.append("deux frappes différentes signalées en conflit")
     if wm.conflit_raccourci({"A": "+"}, "B", "+") != "A":
         mauvais.append("« + » seul non reconnu")
+    if wm.conflit_raccourci({"A": "minus"}, "B", "-") != "A":
+        mauvais.append("« - » et « minus » devraient être en conflit")
     if mauvais:
         echec("détection de conflit de raccourci fautive", " ; ".join(mauvais))
     else:
@@ -131,6 +133,19 @@ def _controle_conflit_saisie(wm, ui):
                         {"token": "Move", "key": "S", "remplacer": True})
         cles = dict(etat.E.PROFILE["console_keys"])
         n_total = len(marques)
+        # ponctuation seule : enregistrée sous son NOM de touche
+        norm = _poster(ui, "/api/console/key", {"token": "Move", "key": "-",
+                                       "remplacer": True})
+        nom_moins = etat.E.PROFILE["console_keys"].get("Move")
+        _poster(ui, "/api/console/key", {"token": "Move", "key": ".",
+                                       "remplacer": True})
+        nom_point = etat.E.PROFILE["console_keys"].get("Move")
+        plus = _poster(ui, "/api/console/key", {"token": "Move", "key": "+",
+                                       "remplacer": True})
+        nom_plus = etat.E.PROFILE["console_keys"].get("Move")
+        _poster(ui, "/api/console/key", {"token": "Move", "key": "Ctrl+M",
+                                       "remplacer": True})
+        nom_ctrl = etat.E.PROFILE["console_keys"].get("Move")
     finally:
         injection.__exit__(None, None, None)
         ui.log, ui.mark_dirty = sauve_log, sauve_dirty
@@ -144,6 +159,15 @@ def _controle_conflit_saisie(wm, ui):
     if not rempl.get("ok") or cles.get("Move") != "S" or cles.get("Store") != "":
         ennuis.append(f"remplacement incorrect : {rempl}, Move={cles.get('Move')!r}, "
                       f"Store={cles.get('Store')!r}")
+    if not (norm.get("ok") and norm.get("key") == "minus" and nom_moins == "minus"):
+        ennuis.append(f"« - » saisi devrait être enregistré « minus » : {norm}, "
+                      f"profil={nom_moins!r}")
+    if nom_point != "period":
+        ennuis.append(f"« . » saisi devrait devenir « period » : {nom_point!r}")
+    if not (plus.get("key") == "+" and nom_plus == "+"):
+        ennuis.append(f"« + » doit rester « + » : {plus}, profil={nom_plus!r}")
+    if nom_ctrl != "Ctrl+M":
+        ennuis.append(f"« Ctrl+M » ne doit pas changer : {nom_ctrl!r}")
     if n_total - n_refus != 2:        # « même frappe » (1) + remplacement (1)
         ennuis.append(f"un seul mark_dirty par écriture attendu, vu "
                       f"{n_total - n_refus} pour 2 écritures")
@@ -199,6 +223,7 @@ async function cas(rep, o) {
   R.oui = await cas([{ok: false, conflit: "Store", raison: "x"}, {ok: true}], true);
   R.non = await cas([{ok: false, conflit: "Store", raison: "x"}], false);
   R.invalide = await cas([{ok: false, raison: "frappe invalide"}], true);
+  R.norm = await cas([{ok: true, key: "minus"}], true);
   process.stdout.write(JSON.stringify(R));
 })();
 """)
@@ -218,6 +243,10 @@ async function cas(rep, o) {
     if not (N["r"]["applique"] is False and len(N["appels"]) == 1 and N["confirms"] == 1
             and N["cles"] == {"Store": "s", "Move": "m"}):
         ennuis.append(f"cas « non » : {N}")
+    M = R["norm"]
+    if not (M["r"]["applique"] and M["r"].get("valeur") == "minus"
+            and M["cles"].get("Move") == "minus"):
+        ennuis.append(f"cas frappe normalisée par le serveur : {M}")
     if I["r"]["applique"] or I["confirms"] or I["alertes"] != 1:
         ennuis.append(f"cas frappe invalide : {I}")
     if ennuis:
@@ -475,11 +504,23 @@ def test_shcuts(wv, wm):
         faux = [f"« {s} » → « {wv._shcut_style_ma3(s, vocab)} » "
                 f"(attendu « {att} »)"
                 for s, att in cas if wv._shcut_style_ma3(s, vocab) != att]
+        # Ponctuation seule → nom de touche MA3 (MA3 refuse « - » : « Illegal
+        # value »), jamais de frappe vide, frappes à modificateur inchangées.
+        cas_p = [("-", "Minus"), ("minus", "Minus"), (".", "Period"),
+                 ("/", "Slash"), (",", "Comma"), ("=", "Equal"),
+                 ("[", "LeftBracket"), ("]", "RightBracket"), ("+", "+"),
+                 ("Ctrl+Z", "Ctrl+Z"), ("Ctrl+M", "Ctrl+M")]
+        faux += [f"« {s} » → « {wv._shcut_style_ma3(s, vocab)} » "
+                 f"(attendu « {att} »)"
+                 for s, att in cas_p if wv._shcut_style_ma3(s, vocab) != att]
+        vides = [s for s in "-./,=[];'`+nS" if not wv._shcut_style_ma3(s, vocab)]
+        if vides:
+            faux.append(f"frappe vide envoyée pour {vides}")
         if faux:
             echec("l'orthographe de MA3 n'est pas respectée", "\n".join(faux))
         else:
             ok("les frappes sont écrites dans l'orthographe de MA3 "
-               "(n → N, pageup → PageUp)")
+               "(n → N, pageup → PageUp, « - » → Minus, « . » → Period, jamais vide)")
 
         # b-quinquies) LA COMMANDE ENVOYÉE À MA3.
         #

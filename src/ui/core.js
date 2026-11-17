@@ -116,10 +116,13 @@ async function poserRaccourciConsole(tok, valeur) {
     if (d && d.raison) alert(d.raison);
     return {applique: false, autre: null};
   }
+  // Le serveur renvoie la frappe normalisée (« - » → « minus ») : c'est elle
+  // qu'on garde, et que l'appelant remet dans son champ.
+  const gardee = (d && typeof d.key === "string") ? d.key : cle;
   profile.console_keys = profile.console_keys || {};
-  profile.console_keys[tok] = cle;
+  profile.console_keys[tok] = gardee;
   if (autre) profile.console_keys[autre] = "";
-  return {applique: true, autre: autre};
+  return {applique: true, autre: autre, valeur: gardee};
 }
 
 // ── Panneau santé : met à jour une pastille (cls: on|warn|off|"") ──────
