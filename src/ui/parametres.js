@@ -380,8 +380,16 @@ function cartonsMiseEnRoute(s, plateforme, local) {
     plugin.note = "ui.mr.plugin.slot_avert";
     plugin.aide = "pluginSlot";
   } else {
+    // Fichiers posés sur ce PC mais sonde muette : soit le plugin est arrêté
+    // (→ Relancer), soit sa case n'existe pas dans le pool du show chargé
+    // (autre show) et « Plugin "WingLoader" » ne trouve rien (→ Réinstaller).
+    // L'app ne peut pas distinguer les deux : elle propose les deux.
     plugin = carton("plugin", "rouge", "ui.mr.plugin.rouge_arrete",
-      [{ id: "relancer_plugin", cle: "ui.mr.plugin.relancer" }], false);
+      [{ id: "relancer_plugin", cle: "ui.mr.plugin.relancer" },
+       { id: "installer_plugin", cle: "ui.mr.plugin.reinstaller" }], false);
+    plugin.champ = "plugin_slot";
+    plugin.note = "ui.mr.plugin.slot_avert";
+    plugin.aide = "pluginSlot";
   }
 
   // Vérification : rien ne la détecte, et l'auteur la veut facultative —

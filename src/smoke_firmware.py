@@ -826,22 +826,22 @@ const ma3 = (ok) => ({actif: ok, entree: true, port_attendu: 8000,
                       configs: [{port: 8000, recoit: true, rec_cmd: true}]});
 const R = [];
 for (const fw of [false, true]) for (const win of [false, true])
-for (const osc of [false, true]) for (const plug of [false, true])
+for (const osc of [false, true]) for (const plug of [false, true, "arrete"])
 for (const verif of ["rouge", "passee", "faite"])
 for (const envoye of [false, true])
 for (const acces of ["ok", "ko", "windows", "absent"])
 for (const bridge of [false, true])
 for (const dirty of [false, true]) {
   const s = {firmware: {configure: fw}, capture: win ? {actif: false} : null,
-             osc: {reachable: osc ? "ok" : "off", ma3: osc && plug ? ma3(true) : null},
-             sonde: {present: plug, actif: plug},
+             osc: {reachable: osc ? "ok" : "off", ma3: osc && plug === true ? ma3(true) : null},
+             sonde: {present: !!plug, actif: plug === true},
              shcuts_horodate: envoye ? 1700000000 : null,
              console: {enabled: acces !== "absent", trusted: acces === "ok" || acces === "windows",
                        windows: acces === "windows"},
              mode: bridge ? "bridge" : "idle", dirty: dirty};
   const c = cartonsMiseEnRoute(s, plateformeMiseEnRoute(s),
     {verifFaite: verif === "faite", verifPassee: verif === "passee"});
-  R.push({fw, win, osc, plug, verif, envoye, acces, bridge, dirty, plateforme: plateformeMiseEnRoute(s),
+  R.push({fw, win, osc, plug: plug === true, arret: plug === "arrete", verif, envoye, acces, bridge, dirty, plateforme: plateformeMiseEnRoute(s),
           cartons: c, suivants: c.map(mrSuivantActif)});
 }
 process.stdout.write(JSON.stringify(R));
@@ -893,6 +893,14 @@ process.stdout.write(JSON.stringify(R));
             # Overwrite / Merge / Cancel accompagnent « Installer le plugin »,
             # et lui seul (jamais sur « Relancer », jamais au vert).
             if x["id"] == "plugin":
+                if c["arret"] and c["osc"] and x["texte"] != "ui.mr.plugin.rouge_arrete" and x["pastille"] != "vert":
+                    echec("(6f) plugin posé mais muet (OSC prêt) : le carton doit dire « installé mais ne répond pas »", f"{etiq} {x}")
+                    return
+                if x["texte"] == "ui.mr.plugin.rouge_arrete" \
+                        and [a["id"] for a in x["actions"]] != ["relancer_plugin", "installer_plugin"]:
+                    echec("(6f) carton Plugin « installé mais muet » : doit proposer Relancer ET "
+                          "Réinstaller (la case peut manquer dans le pool d'un autre show)", f"{x}")
+                    return
                 installe = any(a["id"] == "installer_plugin" for a in x["actions"])
                 if installe != (x.get("champ") == "plugin_slot"):
                     echec("(6f) carton Plugin : champ d'emplacement absent avec "
