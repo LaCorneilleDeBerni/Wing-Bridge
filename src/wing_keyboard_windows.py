@@ -82,6 +82,7 @@ def flog(msg: str):
 INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_UNICODE = 0x0004
+KEYEVENTF_SCANCODE = 0x0008
 VK_SHIFT = 0x10
 
 _W = None            # cache de la couche Win32 (dict) une fois initialisée
@@ -266,6 +267,54 @@ NAMED_VK = {
     "leftbracket": 0xDB, "rightbracket": 0xDD, "backslash": 0xDC, "grave": 0xC0,
 }
 
+# ── Ponctuation : scancode de la position US (pas de VK) ──────────────────────
+# MESURE faite sur Windows 11, disposition fr-FR AZERTY (MapVirtualKeyW(vk, 0)) :
+#   minus 0xBD → scancode 0x00 (AUCUN) ; semicolon 0xBA → 0x1B (la position US de
+#   « ] », pas de « ; ») ; equal 0xBB → 0x0D ; period 0xBE → 0x33 ; comma 0xBC →
+#   0x32. Un VK OEM dépend de la disposition : « minus » partait avec wScan = 0
+#   et « semicolon » sur la mauvaise touche physique — et grandMA3 ne réagissait
+#   pas, alors que la sonde confirmait la table et que le journal notait la frappe.
+# On injecte donc ces touches par SCANCODE de la position physique US (jeu de
+# scancodes 1, IBM PC/AT) avec KEYEVENTF_SCANCODE : c'est le nom que MA3 donne à
+# la touche, quelle que soit la disposition.
+# ⚠️ NON VÉRIFIÉ sur Windows : (a) que grandMA3 réagisse à ces événements (test
+# réel nécessaire) ; (b) que MA3 identifie bien les touches par scancode (c'est
+# une hypothèse de travail) ; (c) le comportement sur un clavier non AZERTY (même
+# position physique, donc même résultat attendu, mais jamais essayé).
+# Les lettres, les chiffres et les touches nommées non OEM (Enter, F1…) restent
+# envoyés par VK, comme avant.
+NAMED_SCAN_US = {
+    "minus": 0x0C, "equal": 0x0D,
+    "leftbracket": 0x1A, "rightbracket": 0x1B,
+    "semicolon": 0x27, "apostrophe": 0x28, "quote": 0x28,
+    "grave": 0x29, "backslash": 0x2B,
+    "comma": 0x33, "period": 0x34, "slash": 0x35,
+}
+# VK → scancode US, pour les chemins qui ne manipulent que le VK (appui,
+# relâchement, tap). Les alias « quote »/« apostrophe » partagent VK et scancode.
+_SCAN_US_PAR_VK = {NAMED_VK[nom]: sc for nom, sc in NAMED_SCAN_US.items()}
+
+# Lettres a–z et chiffres 0–9 (RANGÉE DU HAUT, pas le pavé numérique) : même
+# principe, même hypothèse non vérifiée. Sur AZERTY, `VkKeyScanW('m')` donne la
+# touche physique de position US « ; » (0x27) alors que « M » désigne, dans la
+# table de MA3, la position US de « M » (0x32) ; idem A/Q, Z/W ; et les chiffres
+# s'écrivent AVEC Maj sur AZERTY. Scancodes US du jeu 1 (IBM PC/AT) : rangée
+# QWERTY 0x10–0x19, rangée ASDF 0x1E–0x26, rangée ZXCV 0x2C–0x32, chiffres
+# 1…9 = 0x02…0x0A et 0 = 0x0B.
+# ⚠️ Les VK de lettres/chiffres sont ceux des caractères (ord('A'), ord('0')).
+SCAN_US_LETTRES = {
+    "q": 0x10, "w": 0x11, "e": 0x12, "r": 0x13, "t": 0x14, "y": 0x15,
+    "u": 0x16, "i": 0x17, "o": 0x18, "p": 0x19,
+    "a": 0x1E, "s": 0x1F, "d": 0x20, "f": 0x21, "g": 0x22, "h": 0x23,
+    "j": 0x24, "k": 0x25, "l": 0x26,
+    "z": 0x2C, "x": 0x2D, "c": 0x2E, "v": 0x2F, "b": 0x30, "n": 0x31,
+    "m": 0x32,
+}
+SCAN_US_CHIFFRES = {"1": 0x02, "2": 0x03, "3": 0x04, "4": 0x05, "5": 0x06,
+                    "6": 0x07, "7": 0x08, "8": 0x09, "9": 0x0A, "0": 0x0B}
+for _c, _sc in {**SCAN_US_LETTRES, **SCAN_US_CHIFFRES}.items():
+    _SCAN_US_PAR_VK[ord(_c.upper())] = _sc
+
 # ⚠️ Pas de « Command » sous Windows : « cmd » rabattu sur Ctrl.
 MOD_VK = {
     "ctrl": 0x11, "control": 0x11, "ctl": 0x11,
@@ -310,12 +359,20 @@ def resolve_spec(spec: str):
     mods, base = parsed
     low = base.lower()
     if low in NAMED_VK:
-        msg = (f"combo « {spec} » → VK {NAMED_VK[low]:#04x} (position)"
-               if mods else None)
+        if low in NAMED_SCAN_US:
+            msg = (f"« {spec} » → scancode US {NAMED_SCAN_US[low]:#04x} "
+                   f"(position physique)")
+        else:
+            msg = (f"combo « {spec} » → VK {NAMED_VK[low]:#04x} (position)"
+                   if mods else None)
         return NAMED_VK[low], mods, msg
     vk = _letter_digit_vk(base)
-    if mods and vk is not None:
-        return vk, mods, f"combo « {spec} » → VK {vk:#04x} (position US)"
+    if vk is not None and (mods or not base.isupper()):
+        # Lettre/chiffre : scancode de la position US (voir SCAN_US_LETTRES). Seule
+        # une MAJUSCULE sans modificateur passe par type_char (elle réclame Maj).
+        msg = (f"combo « {spec} » → scancode US {_SCAN_US_PAR_VK[vk]:#04x} "
+               f"(position physique)" if mods else None)
+        return vk, mods, msg
     return None
 
 
@@ -365,12 +422,26 @@ def _send_events(events):
     return w["user32"].SendInput(len(events), arr, ctypes.sizeof(INPUT))
 
 
+def evenement_touche(vk: int, relache: bool, scan=None):
+    """Triplet (wVk, wScan, dwFlags) d'UNE touche. FONCTION PURE (testable hors
+    Windows) : `scan` est la fonction VK → scancode de la disposition, utilisée
+    seulement pour les touches envoyées par VK.
+    Ponctuation de NAMED_SCAN_US → (0, scancode US, SCANCODE[|KEYUP]) ; le reste
+    (lettres, chiffres, modificateurs, touches nommées) → (vk, scancode, 0[|KEYUP])
+    comme avant."""
+    up = KEYEVENTF_KEYUP if relache else 0
+    sc_us = _SCAN_US_PAR_VK.get(vk)
+    if sc_us is not None:
+        return (0, sc_us, KEYEVENTF_SCANCODE | up)
+    return (vk, (scan or _scan)(vk), up)
+
+
 def _ev_down(vk):
-    return (vk, _scan(vk), 0)
+    return evenement_touche(vk, False)
 
 
 def _ev_up(vk):
-    return (vk, _scan(vk), KEYEVENTF_KEYUP)
+    return evenement_touche(vk, True)
 
 
 def _tap(vk: int, mods=()):
@@ -401,10 +472,17 @@ def type_char(ch: str):
     lit la POSITION de la touche, pas le caractère produit : on envoie donc le
     VK de la rangée du haut (0x30–0x39) tel quel. Même principe « position US »
     que pour les raccourcis à modificateur (cf. KEYBOARD_MAPPING.md). Les
-    LETTRES, elles, partagent leur VK sur AZERTY/QWERTY (`s`→0x53…) : VkKeyScan
-    suffit et déclenche le bon mot-clé (validé « s » → Store)."""
-    if len(ch) == 1 and ch.isdigit():
-        _tap(0x30 + int(ch), [])
+    LETTRES ASCII passent désormais AUSSI par scancode US (le VK de `s` est
+    commun à AZERTY/QWERTY — validé « s » → Store — mais pas la position de `m`
+    ni de `a`/`q`/`z`/`w`) : voir SCAN_US_LETTRES. Les autres caractères
+    imprimables (« é », « ç »…) gardent VkKeyScanW comme avant."""
+    if len(ch) == 1 and ch in SCAN_US_CHIFFRES:
+        _tap(ord(ch), [])            # scancode US de la rangée du haut, sans Maj
+        return
+    if len(ch) == 1 and ch.lower() in SCAN_US_LETTRES:
+        # Lettre ASCII : scancode de la position US (A/Q, Z/W, Y/Z, M/; diffèrent
+        # selon la disposition). Majuscule = Maj + même touche physique.
+        _tap(ord(ch.upper()), [VK_SHIFT] if ch.isupper() else [])
         return
     w = _win()
     r = w["user32"].VkKeyScanW(ch)

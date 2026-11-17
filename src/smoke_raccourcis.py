@@ -20,8 +20,111 @@ from pathlib import Path
 from smoke_core import HERE, ok, echec, note, section
 
 
+# Scancodes US de référence (jeu 1, IBM PC/AT), écrits ICI en dur, pas relus de
+# la table testée : le contrôle compare le code à une référence indépendante.
+SCANCODES_US_PONCTUATION = {
+    "minus": 0x0C, "equal": 0x0D, "leftbracket": 0x1A, "rightbracket": 0x1B,
+    "semicolon": 0x27, "apostrophe": 0x28, "quote": 0x28, "grave": 0x29,
+    "backslash": 0x2B, "comma": 0x33, "period": 0x34, "slash": 0x35}
+
+
+SCANCODES_US_LETTRES_CHIFFRES = {
+    **dict(zip("qwertyuiop", range(0x10, 0x1A))),
+    **dict(zip("asdfghjkl", range(0x1E, 0x27))),
+    **dict(zip("zxcvbnm", range(0x2C, 0x33))),
+    **dict(zip("1234567890", range(0x02, 0x0C)))}
+
+
+def _controle_ponctuation_scancode(wm):
+    """Windows : la ponctuation nommée part par SCANCODE de position US.
+
+    Mesure sur Windows 11 AZERTY : « minus » (VK 0xBD) → scancode 0, « semicolon »
+    (VK 0xBA) → 0x1B ; MA3 ne réagissait pas. Contrôle statique + fonction pure
+    `evenement_touche` (aucun appel Windows) : NAMED_SCAN_US couvre chaque
+    ponctuation de TOUCHES_NOMMEES avec le bon scancode, l'appui ET le relâchement
+    portent KEYEVENTF_SCANCODE, les lettres/chiffres/touches non OEM restent par VK.
+    ⚠️ Que MA3 réagisse réellement n'est PAS vérifié ici (test réel Windows)."""
+    import wing_keyboard_windows as ww
+    pb = []
+    ponct = {n for n in wm.TOUCHES_NOMMEES if n in SCANCODES_US_PONCTUATION}
+    if ponct != set(SCANCODES_US_PONCTUATION):
+        pb.append(f"TOUCHES_NOMMEES a changé : {sorted(set(SCANCODES_US_PONCTUATION) ^ ponct)}")
+    table = getattr(ww, "NAMED_SCAN_US", None)
+    if not isinstance(table, dict):
+        pb.append("NAMED_SCAN_US absente")
+        table = {}
+    for nom, sc in SCANCODES_US_PONCTUATION.items():
+        if table.get(nom) != sc:
+            pb.append(f"{nom} : scancode {table.get(nom)!r}, attendu {sc:#04x}")
+        if nom not in ww.NAMED_VK:
+            pb.append(f"{nom} absent de NAMED_VK")
+    src_w = (HERE / "wing_keyboard_windows.py").read_text(encoding="utf-8")
+    faux_scan = lambda vk: 0x99         # scancode de disposition : ne doit PAS servir
+    try:
+        for nom, sc in SCANCODES_US_PONCTUATION.items():
+            vk = ww.NAMED_VK[nom]
+            bas = ww.evenement_touche(vk, False, faux_scan)
+            haut = ww.evenement_touche(vk, True, faux_scan)
+            if bas != (0, sc, ww.KEYEVENTF_SCANCODE):
+                pb.append(f"{nom} appui : {bas}")
+            if haut != (0, sc, ww.KEYEVENTF_SCANCODE | ww.KEYEVENTF_KEYUP):
+                pb.append(f"{nom} relâchement : {haut}")
+        for vk in (0x0D, 0x70, 0x11, 0x10, 0x12, 0x1B, 0x25):  # Enter, F1, Ctrl, Maj, Alt, Esc, ←
+            ev = ww.evenement_touche(vk, False, faux_scan)
+            if ev != (vk, 0x99, 0):
+                pb.append(f"VK {vk:#04x} ne devait pas changer de chemin : {ev}")
+        # Lettres a–z et chiffres 0–9 (rangée du haut) : scancode US aussi.
+        for c, sc in SCANCODES_US_LETTRES_CHIFFRES.items():
+            vk = ord(c.upper())
+            bas = ww.evenement_touche(vk, False, faux_scan)
+            haut = ww.evenement_touche(vk, True, faux_scan)
+            if bas != (0, sc, ww.KEYEVENTF_SCANCODE):
+                pb.append(f"« {c} » appui : {bas}")
+            if haut != (0, sc, ww.KEYEVENTF_SCANCODE | ww.KEYEVENTF_KEYUP):
+                pb.append(f"« {c} » relâchement : {haut}")
+        # Résolution : lettre/chiffre seul → touche à scancode ; combo → ligne de
+        # journal « scancode US » ; majuscule seule → type_char (réclame Maj).
+        r = ww.resolve_spec("m")
+        if not r or r[0] != ord("M") or r[1]:
+            pb.append(f"resolve_spec('m') = {r}")
+        r = ww.resolve_spec("1")
+        if not r or r[0] != ord("1"):
+            pb.append(f"resolve_spec('1') = {r} (appui long impossible)")
+        r = ww.resolve_spec("Ctrl+M")
+        if not r or "scancode US 0x32" not in (r[2] or ""):
+            pb.append(f"resolve_spec('Ctrl+M') = {r}")
+        if ww.resolve_spec("M") is not None:
+            pb.append("une majuscule seule ne doit pas perdre son Maj")
+        if not re.search(r"in SCAN_US_CHIFFRES:\s+_tap\(ord\(ch\), \[\]\)", src_w) \
+                or "ch.lower() in SCAN_US_LETTRES" not in src_w:
+            pb.append("type_char ne passe plus par les scancodes pour lettres/chiffres")
+    except Exception as e:
+        pb.append(f"{type(e).__name__}: {e}")
+    # Audit de source : appui, relâchement, tap et appui long passent TOUS par
+    # _ev_down/_ev_up → evenement_touche (aucune construction de triplet à côté).
+    src = (HERE / "wing_keyboard_windows.py").read_text(encoding="utf-8")
+    if not re.search(r"def _ev_down\(vk\):\s+return evenement_touche\(vk, False\)", src):
+        pb.append("_ev_down ne passe plus par evenement_touche")
+    if not re.search(r"def _ev_up\(vk\):\s+return evenement_touche\(vk, True\)", src):
+        pb.append("_ev_up ne passe plus par evenement_touche")
+    if len(re.findall(r"\b_scan\b", src)) != 2:     # sa définition + son seul usage
+        pb.append("un triplet est construit hors evenement_touche (appel de _scan en trop)")
+    msg = (ww.resolve_spec("minus") or (0, 0, ""))[2] or ""
+    if "scancode US 0x0c" not in msg:
+        pb.append(f"ligne de journal absente pour « minus » : {msg!r}")
+    if pb:
+        echec("ponctuation Windows : pas injectée par scancode de position US",
+              " ; ".join(pb))
+    else:
+        ok(f"Windows : {len(SCANCODES_US_PONCTUATION)} ponctuations + "
+           f"{len(SCANCODES_US_LETTRES_CHIFFRES)} lettres/chiffres : appui et "
+           "relâchement par scancode US + KEYEVENTF_SCANCODE, touches non OEM "
+           "inchangées (envoi réel : non vérifié sur Windows)")
+
+
 def test_raccourcis(wm, wk):
     section("7. Raccourcis console par défaut")
+    _controle_ponctuation_scancode(wm)
     try:
         wk.LAYOUT = wk.build_layout_map()
     except Exception as e:

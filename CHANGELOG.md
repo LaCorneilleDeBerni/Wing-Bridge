@@ -9,6 +9,18 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Fixed
 
+- Windows keyboard helper: punctuation keys (`minus`, `equal`, `semicolon`,
+  `apostrophe`, `grave`, `comma`, `period`, `slash`, brackets, `backslash`),
+  letters a–z and top-row digits 0–9 are now injected by the scancode of their
+  US physical position (`KEYEVENTF_SCANCODE`) instead of a layout-dependent
+  virtual key. Measured on Windows 11 / AZERTY: `minus` (VK 0xBD) maps to
+  scancode 0 and `semicolon` (VK 0xBA) to the US position of “]”, so the wing's
+  “-” button did nothing in grandMA3 although the shortcut table was applied
+  and verified. Modifiers still go by virtual key; other characters (“é”…)
+  keep the previous path. NOT verified on Windows: that grandMA3 reacts, that
+  it identifies keys by scancode (working hypothesis), and behaviour on
+  non-AZERTY layouts. macOS not changed.
+
 - Keyboard shortcuts: a lone punctuation character typed by hand (“-”, “.”,
   “/”…) is now stored under its key name (`minus`, `period`, `slash`…), like
   the default table, and sent to MA3 under the name its table uses (`Minus`,

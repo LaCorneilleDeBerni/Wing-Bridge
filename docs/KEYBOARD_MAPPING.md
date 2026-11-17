@@ -433,6 +433,18 @@ physique « - » d'AZERTY soit la touche « 6 » (VK 0x36) est une connaissance 
 clavier, **non vérifiée sur la machine**. Enregistrer « minus » aligne ce qui
 est tapé sur ce que MA3 lit (sa table nomme des positions US).
 
+**Mise à jour (17/11/2026) — Windows : scancode de position US.** Le paragraphe
+ci-dessus (« VK 0xBD, position physique ») est **faux** : mesuré sur Windows 11
+AZERTY, « minus » (VK 0xBD) a le scancode 0x00 et « semicolon » (0xBA) le 0x1B ;
+MA3 ne réagissait pas. L'assistant clavier Windows injecte désormais ponctuation
+nommée, lettres a–z et chiffres 0–9 par SCANCODE de position US
+(`KEYEVENTF_SCANCODE`, tables `NAMED_SCAN_US` / `SCAN_US_LETTRES` /
+`SCAN_US_CHIFFRES`) ; les modificateurs restent en VK. Détail, mesure et chemin
+d'une frappe : `WINDOWS.md`, section « Ponctuation, lettres, chiffres : scancode
+de position US ». **Non vérifié** : que MA3 réagisse (test réel Asus), qu'il
+identifie les touches par scancode (hypothèse), le comportement hors AZERTY.
+macOS non traité.
+
 **« + » : pas la cause, traitement inchangé.** Le token « + » n'est pas dans
 `TOKEN_VERS_KEYCODE` ; son KeyCode serait « + », absent de la table de MA3 : il
 n'est jamais envoyé (voir la section suivante). `_shcut_style_ma3("+")`

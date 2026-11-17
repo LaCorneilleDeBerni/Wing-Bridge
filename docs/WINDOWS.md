@@ -322,7 +322,60 @@ MA », donc MA3 lit « MA+8 ». MA3 lit la **position** de touche, pas le caract
 produit — même règle « position US » que le projet applique déjà aux raccourcis à
 modificateur (`KEYBOARD_MAPPING.md`). `type_char` envoie donc les chiffres en
 position US nue (`0x30`–`0x39`). Les lettres partagent leur VK AZERTY/QWERTY
-(`s` → `0x53`), `VkKeyScan` suffit.
+(`s` → `0x53`), `VkKeyScan` suffit. ⚠️ **Partiellement dépassé** : lettres et
+chiffres partent maintenant par scancode, voir la section suivante.
+
+### Ponctuation, lettres, chiffres : scancode de position US
+
+🐛 Vu sur Windows 11, AZERTY fr-FR, grandMA3 2.5.1.0 (ShCuts actif) : la table
+est envoyée et relue par la sonde, le journal note
+« ⬇ « minus » maintenue / ✓ 1 frappe(s) → MA3 », mais le bouton « - » (frappe
+« minus ») ne fait rien ; « Move » réglé sur « semicolon » non plus. Les lettres
+(« s » → Store) marchent.
+
+**Mesure** (`MapVirtualKeyW(vk, 0)`, disposition fr-FR AZERTY, sur la machine) :
+`minus` VK 0xBD → scancode **0x00** (aucun) ; `semicolon` 0xBA → 0x1B (position
+US de « ] ») ; `equal` 0xBB → 0x0D ; `period` 0xBE → 0x33 ; `comma` 0xBC → 0x32.
+Un VK OEM suit la disposition active ; l'événement de « minus » partait donc avec
+`wVk=0xBD, wScan=0`.
+
+**Correctif** (`src/wing_keyboard_windows.py`) : ces touches sont injectées par
+SCANCODE de la position physique US, avec `KEYEVENTF_SCANCODE` (0x0008) et
+`wVk=0` — triplets `(0, scancode, SCANCODE)` à l'appui,
+`(0, scancode, SCANCODE | KEYUP)` au relâchement.
+
+| Famille | Table | Scancodes (jeu 1, IBM PC/AT) |
+|---|---|---|
+| Ponctuation nommée | `NAMED_SCAN_US` | minus 0x0C, equal 0x0D, leftbracket 0x1A, rightbracket 0x1B, semicolon 0x27, apostrophe/quote 0x28, grave 0x29, backslash 0x2B, comma 0x33, period 0x34, slash 0x35 |
+| Lettres a–z | `SCAN_US_LETTRES` | Q–P 0x10–0x19, A–L 0x1E–0x26, Z–M 0x2C–0x32 |
+| Chiffres 0–9 (rangée du haut, pas le pavé) | `SCAN_US_CHIFFRES` | 1…9 = 0x02…0x0A, 0 = 0x0B |
+
+Chemin d'une frappe : `type_spec` / `key_down` / `key_up` → `resolve_spec` (VK) →
+`_ev_down` / `_ev_up` → **`evenement_touche`** (fonction pure, seule à construire
+un triplet) → `_send_events` → `SendInput`. Appui, relâchement, tap et appui long
+passent donc tous par la même construction. Les **modificateurs** d'un combo
+restent envoyés par VK. La base d'un combo (« Ctrl+C ») passe par scancode ; le
+journal écrit « combo « Ctrl+C » → scancode US 0x2e (position physique) » et,
+pour la ponctuation, « « minus » → scancode US 0x0c (position physique) ».
+
+**Inchangé** : les touches nommées non OEM (Enter, Esc, F1–F12, flèches…) et les
+modificateurs restent par VK. Un caractère imprimable qui n'est NI lettre ASCII,
+NI chiffre, NI dans `NAMED_SCAN_US` (« é », « ç » d'un profil AZERTY) garde
+`type_char` → `VkKeyScanW`, comme avant. Une MAJUSCULE seule passe par
+`type_char` (Maj + même touche physique). macOS : non traité (même problème
+probable via la table `LAYOUT`, à traiter après vérification sur l'Asus).
+
+**⚠️ Ce qui n'est PAS vérifié** (aucune exécution sous Windows pour ce correctif ;
+seuls les triplets d'événements sont testés, sur Mac, par fonction pure) :
+- **(a)** que grandMA3 réagisse effectivement à ces événements — test réel sur
+  l'Asus nécessaire ;
+- **(b)** que MA3 identifie les touches par scancode : c'est l'**hypothèse de
+  travail** sur laquelle repose tout ce correctif (indice : la touche physique
+  « M » d'un AZERTY est affichée « semicolon » dans sa table) ;
+- **(c)** le comportement sur un clavier non AZERTY (QWERTY, QWERTZ… : même
+  position physique, donc même résultat attendu — jamais essayé) ;
+- les valeurs des scancodes viennent de la connaissance du jeu de scancodes 1,
+  pas d'une mesure sur la machine (seul le côté VK → scancode a été mesuré).
 
 ### Limites connues, non résolues
 
