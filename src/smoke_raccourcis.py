@@ -95,6 +95,11 @@ def _controle_ponctuation_scancode(wm):
             pb.append(f"resolve_spec('Ctrl+M') = {r}")
         if ww.resolve_spec("M") is not None:
             pb.append("une majuscule seule ne doit pas perdre son Maj")
+        m_tc = re.search(r"^def type_char\(ch: str\):.*?^def ", src_w, re.S | re.M)
+        if not m_tc or not re.search(
+                r'if ch == "\+":(?:\s*#[^\n]*)*\s+_tap\(NAMED_VK\["equal"\], \[\]\)', m_tc.group(0)):
+            pb.append("type_char(\"+\") doit envoyer Equal SANS Maj (en ShCuts, Maj = touche MA : "
+                      "« + » affichait « Next » dans grandMA3)")
         if not re.search(r"in SCAN_US_CHIFFRES:\s+_tap\(ord\(ch\), \[\]\)", src_w) \
                 or "ch.lower() in SCAN_US_LETTRES" not in src_w:
             pb.append("type_char ne passe plus par les scancodes pour lettres/chiffres")

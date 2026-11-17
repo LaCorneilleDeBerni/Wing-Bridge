@@ -476,6 +476,14 @@ def type_char(ch: str):
     commun à AZERTY/QWERTY — validé « s » → Store — mais pas la position de `m`
     ni de `a`/`q`/`z`/`w`) : voir SCAN_US_LETTRES. Les autres caractères
     imprimables (« é », « ç »…) gardent VkKeyScanW comme avant."""
+    if ch == "+":
+        # « + » = la touche « = » de position US, SANS Maj. VkKeyScanW('+')
+        # réclame Maj sur AZERTY ; or en ShCuts « Maj = touche MA » : MA+« = »
+        # n'est pas PLUS mais autre chose (vécu sur l'Asus, 17/11/2026 : le
+        # bouton « + » affichait « Next » dans grandMA3). La table de MA3 a
+        # PLUS = Equal (et kpAdd) : on envoie Equal, sans modificateur.
+        _tap(NAMED_VK["equal"], [])  # VK 0xBB → scancode US 0x0D (Equal), sans Maj
+        return
     if len(ch) == 1 and ch in SCAN_US_CHIFFRES:
         _tap(ord(ch), [])            # scancode US de la rangée du haut, sans Maj
         return
