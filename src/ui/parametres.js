@@ -634,7 +634,14 @@ function assistantMiseEnRouteSuivant() {
   const cartons = _mrCartons();
   if (!mrSuivantActif(cartons[_mr.i])) return;   // garde-fou : jamais au rouge
   _mrMsgVider();
-  if (_mr.i >= cartons.length - 1) { assistantMiseEnRouteFermer(); return; }
+  if (_mr.i >= cartons.length - 1) {
+    // « Terminer » : on referme la fenêtre et on emmène l'utilisateur sur
+    // l'onglet Bridge (le bridge tourne déjà : le carton Démarrage était vert).
+    assistantMiseEnRouteFermer();
+    const b = document.querySelector('nav button[data-tab="bridge"]');
+    if (b) b.click();
+    return;
+  }
   _mr.i++;
   _mr.signature = "";
   assistantMiseEnRouteRendre();

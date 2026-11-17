@@ -1005,6 +1005,11 @@ process.stdout.write(JSON.stringify(R));
         echec("(6g) _mrDemarrer() ferme la fenêtre ou change d'onglet : le carton doit passer "
               "au vert sur place avant le carton « Bonne utilisation »")
         return
+    m_suiv = _re.search(r"^function assistantMiseEnRouteSuivant\(\) \{.*?^\}", js, _re.S | _re.M)
+    if not m_suiv or 'nav button[data-tab="bridge"]' not in m_suiv.group(0) \
+            or m_suiv.group(0).index("assistantMiseEnRouteFermer") > m_suiv.group(0).index('data-tab="bridge"'):
+        echec("(6g) « Terminer » (dernier carton) doit fermer la fenêtre puis ouvrir l'onglet Bridge")
+        return
     for _id in ("mrShcutsEtat", "mrShcutsBtn"):
         if f'id="{_id}"' not in (HERE / "wing_ui.html").read_text(encoding="utf-8"):
             echec(f"(6g) #{_id} absent de wing_ui.html (message / bouton fixes de l'envoi)")
