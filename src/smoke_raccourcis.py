@@ -625,6 +625,33 @@ def test_shcuts(wv, wm):
                                "(marquage neutralisé) le fige bien")
                     finally:
                         wraccourcis._marquer_shcuts_envoyes = sauve_marquer
+        # ── Le vocabulaire des noms de touches vient du fichier D'ORIGINE de MA3,
+        #    jamais de WingBridge.xml (que l'app écrit). Vécu sur l'Asus : « - » écrit
+        #    à la place de « Minus » (n°136) dans NOTRE fichier a fait oublier
+        #    « Minus » ; l'app a alors envoyé « minus » → MA3 « Illegal value ».
+        _modele = ('<KeyboardShortcuts>\n'
+                   '<KeyboardShortcut KeyCode="MINUS" Shortcut="%s"/>\n'
+                   '<KeyboardShortcut KeyCode="MINUS" Shortcut="kpSubtract"/>\n'
+                   '</KeyboardShortcuts>\n')
+        bac_v = Path(tempfile.mkdtemp(prefix="wb_vocab_"))
+        sauve_dir = wv.MA3_SHCUTS_DIR
+        try:
+            wv.MA3_SHCUTS_DIR = bac_v
+            (bac_v / f"{wraccourcis.MA3_SHCUTS_ORIGINE}.xml").write_text(_modele % "Minus", encoding="utf-8")
+            (bac_v / f"{wraccourcis.MA3_SHCUTS_NOM}.xml").write_text(_modele % "-", encoding="utf-8")
+            texte_notre = (bac_v / f"{wraccourcis.MA3_SHCUTS_NOM}.xml").read_text(encoding="utf-8")
+            v = wraccourcis._shcuts_vocab_depuis_ma3(texte_notre)
+            res = wraccourcis._shcut_style_ma3("minus", v)
+            if res != "Minus":
+                echec("le vocabulaire apprend de notre propre fichier : « minus » part en "
+                      "minuscules alors que MA3 dit « Minus » (Illegal value)",
+                      f"_shcut_style_ma3('minus') = {res!r}")
+            else:
+                ok("vocabulaire des noms de touches appris du fichier d'ORIGINE de MA3 : "
+                   "« minus » part en « Minus » même si WingBridge.xml a perdu « Minus »")
+        finally:
+            wv.MA3_SHCUTS_DIR = sauve_dir
+            shutil.rmtree(bac_v, ignore_errors=True)
     except Exception as e:
         echec("le contrôle des raccourcis a levé une exception",
               f"{type(e).__name__}: {e}")

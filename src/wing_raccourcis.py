@@ -160,6 +160,28 @@ def _shcut_norme(spec: str) -> str:
     return "+".join(p.strip().lower() for p in str(spec or "").split("+") if p.strip())
 
 
+def _shcuts_vocab_depuis_ma3(texte: str) -> dict:
+    """Vocabulaire des noms de touches, appris du fichier D'ORIGINE de MA3.
+
+    🐛 Vécu sur l'Asus (17/11/2026) : le vocabulaire était appris de
+    `WingBridge.xml`, le fichier que l'app ÉCRIT. Une première écriture de « - »
+    à la place de « Minus » (n°136) a fait DISPARAÎTRE « Minus » de ce fichier ;
+    le vocabulaire ne le connaissait plus, a laissé « minus » tel quel, et MA3 a
+    répondu « Illegal value … "minus" ». Un vocabulaire qui apprend de ce qu'on a
+    soi-même écrit recopie ses propres erreurs (même piège que « n » plus haut).
+    On l'apprend donc de `KeyboardShortCuts.xml`, que MA3 exporte et que l'app
+    ne modifie jamais ; à défaut seulement, du texte courant.
+    """
+    import wing_ui as core
+    p = core.MA3_SHCUTS_DIR / f"{MA3_SHCUTS_ORIGINE}.xml"
+    if p.is_file():
+        try:
+            return _shcuts_vocabulaire(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return _shcuts_vocabulaire(texte)
+
+
 def _shcuts_vocabulaire(texte: str) -> dict:
     """Orthographe exacte de MA3 pour chaque touche : {forme normalisée: mot}.
 
@@ -340,7 +362,7 @@ def shcuts_etat() -> dict:
         return base
 
     actuel = _shcuts_par_touche(texte)
-    vocab = _shcuts_vocabulaire(texte)
+    vocab = _shcuts_vocab_depuis_ma3(texte)
     ecarts, collisions = [], []
     for kc, spec in sorted(voulu.items()):
         if kc not in actuel:
@@ -468,7 +490,7 @@ def shcuts_envoyer(force: bool = False) -> dict:
     texte, _ = _shcuts_gabarit()
     voulu, _ecartes = _shcuts_du_profil()
     actuel = _shcuts_par_touche(texte)
-    vocab = _shcuts_vocabulaire(texte)
+    vocab = _shcuts_vocab_depuis_ma3(texte)
     faits = []
 
     # Touches à corriger : celles dont l'orthographe EXACTE de MA3 n'est pas
