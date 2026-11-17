@@ -851,7 +851,7 @@ process.stdout.write(JSON.stringify(R));
         echec("(6) cartonsMiseEnRoute a planté dans node", r.stderr[:300])
         return
     cas = json.loads(r.stdout)
-    attendu_ids = ["firmware", "osc", "plugin", "verification", "raccourcis", "sauvegarde", "demarrage"]
+    attendu_ids = ["firmware", "osc", "plugin", "verification", "raccourcis", "sauvegarde", "demarrage", "fin"]
     cles = set()
     for c in cas:
         etiq = {k: c[k] for k in ("fw", "win", "osc", "plug", "verif", "envoye", "acces", "bridge")}
@@ -859,7 +859,7 @@ process.stdout.write(JSON.stringify(R));
         if ids != attendu_ids:
             echec("(6a) une étape manque ou change d'ordre dans la liste", f"{etiq} → {ids}")
             return
-        fw, osc, plug, verif, rac, sauv, dem = c["cartons"]
+        fw, osc, plug, verif, rac, sauv, dem, fin = c["cartons"]
         # (6g) Raccourcis : vert SEULEMENT si envoyés ET Accessibilité accordée
         # (ou Windows) ; Démarrage : vert SEULEMENT si le bridge tourne.
         rac_ok = c["envoye"] and c["acces"] in ("ok", "windows")
@@ -871,7 +871,10 @@ process.stdout.write(JSON.stringify(R));
             echec("(6g) carton Sauvegarde : pastille incohérente avec s.dirty "
                   "(vert = rien à enregistrer)", f"{etiq} dirty={c['dirty']} → {sauv['pastille']}")
             return
-        if (dem["pastille"] == "vert") != c["bridge"]:
+        if fin["pastille"] != "vert" or fin["actions"] or not c["suivants"][-1]:
+            echec("(6g) carton final « Bonne utilisation » : doit être vert, sans action", f"{etiq} {fin}")
+            return
+        if (dem["pastille"] == "vert") != c["bridge"] or c["suivants"][-2] != c["bridge"]:
             echec("(6g) carton Démarrage : pastille incohérente avec l'état du bridge",
                   f"{etiq} → {dem['pastille']}")
             return
@@ -938,7 +941,7 @@ process.stdout.write(JSON.stringify(R));
     if manquantes:
         echec("(6d) clés de l'assistant de mise en route absentes en fr/en", ", ".join(manquantes))
         return
-    ok(f"(6a) cartonsMiseEnRoute ({len(cas)} combinaisons dans node) : 7 cartons toujours "
+    ok(f"(6a) cartonsMiseEnRoute ({len(cas)} combinaisons dans node) : 8 cartons toujours "
        "listés, pastille = détection, « Suivant » au vert (ou orange de la vérification) seulement")
     ok("(6b) carton Firmware : capture sous Windows, import .bin / .pcapng ailleurs")
     ok("(6g) cartons Raccourcis (envoi + Accessibilité) et Démarrage (bridge qui tourne) : "
@@ -994,6 +997,14 @@ process.stdout.write(JSON.stringify(R));
     if not m_env or 'shcutsEnvoyer("mrShcutsBtn", "mrShcutsEtat")' not in m_env.group(0):
         echec("(6g) _mrEnvoyerRaccourcis doit appeler shcutsEnvoyer (même envoi que le bouton de l'onglet Touches)")
         return
+    m_dem = _re.search(r"^async function _mrDemarrer\(\) \{.*?^\}", js, _re.S | _re.M)
+    if not m_dem or "toggleBridge()" not in m_dem.group(0):
+        echec("(6g) _mrDemarrer() introuvable ou ne démarre pas le bridge (toggleBridge)")
+        return
+    if "assistantMiseEnRouteFermer" in m_dem.group(0) or "click()" in m_dem.group(0) or 'data-tab' in m_dem.group(0):
+        echec("(6g) _mrDemarrer() ferme la fenêtre ou change d'onglet : le carton doit passer "
+              "au vert sur place avant le carton « Bonne utilisation »")
+        return
     for _id in ("mrShcutsEtat", "mrShcutsBtn"):
         if f'id="{_id}"' not in (HERE / "wing_ui.html").read_text(encoding="utf-8"):
             echec(f"(6g) #{_id} absent de wing_ui.html (message / bouton fixes de l'envoi)")
@@ -1001,7 +1012,7 @@ process.stdout.write(JSON.stringify(R));
     manque = [f for f in ("fwImportBin(", "fwImportCapture(", "fwCaptureAmorcer(",
                           "_mrInstallerPlugin(", "configGuideeDemarrer(", "fwExport(",
                           "_mrEnvoyerRaccourcis(", 'sauvegarderConfigWizard("mrMsg")',
-                          "allerDemarrerBridge(")
+                          "_mrDemarrer(")
               if f not in m_act.group(0)]
     if manque:
         echec("(6c) l'assistant ne réutilise pas les fonctions existantes", ", ".join(manque))

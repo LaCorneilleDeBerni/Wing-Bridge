@@ -442,7 +442,11 @@ function cartonsMiseEnRoute(s, plateforme, local) {
     ? carton("demarrage", "vert", "ui.mr.demarrage.vert", [], true)
     : carton("demarrage", "rouge", "ui.mr.demarrage.rouge",
         [{ id: "demarrer", cle: "ui.mr.demarrage.demarrer" }], false);
-  return [fw, osc, plugin, verif, rac, sauv, dem];
+  // Dernier carton : félicitations. Toujours vert, sans action ; on n'y arrive
+  // qu'en passant « Suivant » sur le carton Démarrage, lui-même verrouillé tant
+  // que le bridge ne tourne pas.
+  const fin = carton("fin", "vert", "ui.mr.fin.vert", [], true);
+  return [fw, osc, plugin, verif, rac, sauv, dem, fin];
 }
 
 // « Suivant » : actif seulement si le carton est en place (vert), ou orange
@@ -666,6 +670,17 @@ async function _mrEnvoyerRaccourcis() {
   finally { _mrEnvoiEnCours = false; }
 }
 
+// Démarre le bridge SANS quitter la fenêtre (pas de bascule d'onglet) : le
+// retour visuel est la pastille du carton Démarrage, pilotée par s.mode.
+async function _mrDemarrer() {
+  const msg = document.getElementById("mrMsg");
+  if (msg) { msg.textContent = t("ui.mr.demarrage.en_cours"); msg.style.color = ""; }
+  try { if (currentMode !== "bridge") await toggleBridge(); }
+  catch (e) {
+    if (msg) { msg.textContent = t("ui.param.echec_requete"); msg.style.color = "var(--red)"; }
+  }
+}
+
 // Les actions REPRENNENT les fonctions existantes, rien n'est réécrit ici.
 function _mrAction(id) {
   if (id === "capturer") {
@@ -685,11 +700,9 @@ function _mrAction(id) {
   else if (id === "envoyer_raccourcis") _mrEnvoyerRaccourcis();
   else if (id === "sauvegarder") sauvegarderConfigWizard("mrMsg");
   else if (id === "demarrer") {
-    // Le bridge se démarre depuis l'onglet Bridge : la fenêtre (dans l'onglet
-    // Paramètres) se referme, comme pour « Capturer ». Même geste que l'ancien
-    // bouton « Démarrer le bridge » (allerDemarrerBridge).
-    assistantMiseEnRouteFermer();
-    allerDemarrerBridge();
+    // On reste dans la fenêtre : le bridge est démarré sur place et le carton
+    // passe au vert tout seul quand l'état serveur le confirme (poll).
+    _mrDemarrer();
   }
   else if (id === "config_guidee") {
     assistantMiseEnRouteFermer();
@@ -943,17 +956,6 @@ async function sauvegarderConfigWizard(msgId) {
     return;
   }
   if (msg) { msg.textContent = t("ui.param.guide.sauvegarde_ok"); msg.style.color = "var(--green)"; }
-}
-
-// Carton « Démarrage » de la Mise en route. Décision assumée (18/09/2026) :
-// ce bouton démarre RÉELLEMENT le bridge — le même geste que #bridgeBtn
-// (toggleBridge(), ui/bridge.js) — puis bascule sur l'onglet Bridge.
-// Ne toggle PAS à l'aveugle : si le bridge tournait déjà, on ne veut pas
-// l'arrêter par erreur.
-async function allerDemarrerBridge() {
-  if (currentMode !== "bridge") await toggleBridge();
-  const b = document.querySelector('nav button[data-tab="bridge"]');
-  if (b) b.click();
 }
 
 // ── OSC : est-il VRAIMENT activé dans grandMA3 ? ──────────
