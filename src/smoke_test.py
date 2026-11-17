@@ -465,7 +465,7 @@ def main():
         test_casse_motscles(ui)
         if mods.get("wing_mapper"):
             test_assistant(ui, mods["wing_mapper"])
-            test_raccourcis_uniques(mods["wing_mapper"])
+            test_raccourcis_uniques(mods["wing_mapper"], ui)
             if mods.get("wing_bridge"):
                 test_forme_profil(mods["wing_mapper"], mods["wing_bridge"], ui)
             test_shcuts(ui, mods["wing_mapper"])

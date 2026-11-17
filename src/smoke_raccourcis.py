@@ -11,6 +11,8 @@ Voir smoke_core.py pour ok/echec/note/section.
 import etat
 import json
 import re
+import shutil
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -74,8 +76,162 @@ def _raccourcis_ma3():
     return (table or None), f.name
 
 
-def test_raccourcis_uniques(wm):
+# ── Une frappe = une seule fonction : détection, route, interface ────────────
+#
+# Étend la section 17 : la table PAR DÉFAUT est sans doublon, mais
+# l'utilisateur peut en créer un en saisissant une frappe déjà prise. Trois
+# portes, chacune vue rouge par réinjection :
+#   (a) normalisation + détection (fonctions pures de wing_mapper) ;
+#   (b) route /api/console/key : refus SANS « remplacer » (profil inchangé),
+#       remplacement atomique AVEC ;
+#   (c) interface : les deux champs de saisie passent par
+#       poserRaccourciConsole (ui/core.js), exécutée dans node.
+
+def _controle_conflit_saisie(wm, ui):
+    # (a) fonctions pures
+    cas_conflit = [("Ctrl+Shift+S", "shift + control+s"), ("Cmd+K", "command+k"),
+                   ("Alt+X", "Option+x"), ("Alt+X", "opt+X"), ("s", "S"),
+                   ("Ctrl+Alt+F", "alt+ctl+f")]
+    mauvais = []
+    for a, b in cas_conflit:
+        if wm.conflit_raccourci({"A": a}, "B", b) != "A":
+            mauvais.append(f"« {a} » / « {b} » devraient être en conflit")
+    if wm.conflit_raccourci({"A": "x", "C": ""}, "B", "") is not None:
+        mauvais.append("une frappe vide est signalée en conflit")
+    if wm.conflit_raccourci({"A": "", "C": ""}, "B", "  ") is not None:
+        mauvais.append("des espaces seuls sont signalés en conflit")
+    if wm.conflit_raccourci({"A": "s"}, "A", "s") is not None:
+        mauvais.append("un token est en conflit avec lui-même")
+    if wm.conflit_raccourci({"A": "Ctrl+S"}, "B", "Ctrl+Shift+S") is not None:
+        mauvais.append("deux frappes différentes signalées en conflit")
+    if wm.conflit_raccourci({"A": "+"}, "B", "+") != "A":
+        mauvais.append("« + » seul non reconnu")
+    if mauvais:
+        echec("détection de conflit de raccourci fautive", " ; ".join(mauvais))
+    else:
+        ok(f"conflit de frappe : {len(cas_conflit)} écritures différentes de la "
+           "même frappe détectées ; vide, même token, frappes distinctes jamais")
+
+    # (b) la route
+    from smoke_core import _poster
+    sauve_log, sauve_dirty = ui.log, ui.mark_dirty
+    marques = []
+    injection = etat.injecter()
+    injection.__enter__()
+    try:
+        ui.log = lambda *a, **k: None
+        ui.mark_dirty = lambda *a, **k: marques.append(1)
+        etat.E.PROFILE["console_keys"].update({"Store": "s", "Move": "m"})
+        avant = json.dumps(etat.E.PROFILE["console_keys"], sort_keys=True)
+        refus = _poster(ui, "/api/console/key", {"token": "Move", "key": "S"})
+        apres_refus = json.dumps(etat.E.PROFILE["console_keys"], sort_keys=True)
+        n_refus = len(marques)
+        meme = _poster(ui, "/api/console/key", {"token": "Store", "key": "s"})
+        rempl = _poster(ui, "/api/console/key",
+                        {"token": "Move", "key": "S", "remplacer": True})
+        cles = dict(etat.E.PROFILE["console_keys"])
+        n_total = len(marques)
+    finally:
+        injection.__exit__(None, None, None)
+        ui.log, ui.mark_dirty = sauve_log, sauve_dirty
+    ennuis = []
+    if refus.get("ok") or refus.get("conflit") != "Store" or not refus.get("raison"):
+        ennuis.append(f"refus attendu avec conflit=Store et raison : {refus}")
+    if apres_refus != avant or n_refus:
+        ennuis.append("le refus a modifié le profil ou marqué « sale »")
+    if not meme.get("ok"):
+        ennuis.append(f"même token + même frappe refusé : {meme}")
+    if not rempl.get("ok") or cles.get("Move") != "S" or cles.get("Store") != "":
+        ennuis.append(f"remplacement incorrect : {rempl}, Move={cles.get('Move')!r}, "
+                      f"Store={cles.get('Store')!r}")
+    if n_total - n_refus != 2:        # « même frappe » (1) + remplacement (1)
+        ennuis.append(f"un seul mark_dirty par écriture attendu, vu "
+                      f"{n_total - n_refus} pour 2 écritures")
+    if ennuis:
+        echec("route /api/console/key : conflit mal géré", " ; ".join(ennuis))
+    else:
+        ok("route /api/console/key : doublon refusé sans « remplacer » (profil "
+           "inchangé, rien marqué), remplacement atomique avec (l'autre → vide, "
+           "un mark_dirty)")
+
+    # (c) l'interface
+    js = {f.name: f.read_text(encoding="utf-8")
+          for f in sorted((HERE / "ui").glob("*.js"))}
+    m = re.search(r"^async function poserRaccourciConsole\(.*?^\}",
+                  js.get("core.js", ""), re.S | re.M)
+    if not m:
+        echec("poserRaccourciConsole introuvable dans ui/core.js")
+        return
+    hors = [n for n, c in js.items() if n != "core.js" and "/api/console/key" in c]
+    dans_corps = m.group(0).count("/api/console/key")
+    reste_core = "/api/console/key" in js["core.js"].replace(m.group(0), "")
+    pas_via = [n for n in ("profils.js", "touches.js")
+               if "poserRaccourciConsole(" not in js.get(n, "")]
+    if hors or reste_core or dans_corps != 2 or pas_via:
+        echec("un point de saisie contourne la confirmation de remplacement",
+              f"appels directs hors de la fonction partagée : {hors}"
+              f"{' + core.js' if reste_core else ''} ; appels dans la fonction : "
+              f"{dans_corps} (attendu 2) ; points de saisie sans elle : {pas_via}")
+        return
+    node = shutil.which("node") or next(
+        (c for c in ("/opt/homebrew/bin/node", "/usr/local/bin/node")
+         if Path(c).exists()), None)
+    if not node:
+        note("node introuvable — poserRaccourciConsole non exécutée (audit statique seul)")
+        ok("les deux champs de saisie passent par poserRaccourciConsole (audit statique)")
+        return
+    script = (m.group(0) + """
+let appels, reponses, oui, alertes, confirms, profile;
+function t(c, p) { return c + JSON.stringify(p || {}); }
+async function api(chemin, corps) { appels.push(corps); return reponses.shift(); }
+function confirm(msg) { confirms.push(msg); return oui; }
+function alert(msg) { alertes.push(msg); }
+async function cas(rep, o) {
+  appels = []; reponses = rep; oui = o; confirms = []; alertes = [];
+  profile = {console_keys: {Store: "s", Move: "m"}};
+  const r = await poserRaccourciConsole("Move", " S ");
+  return {r, appels, confirms: confirms.length, alertes: alertes.length,
+          cles: profile.console_keys};
+}
+(async () => {
+  const R = {};
+  R.libre = await cas([{ok: true}], true);
+  R.oui = await cas([{ok: false, conflit: "Store", raison: "x"}, {ok: true}], true);
+  R.non = await cas([{ok: false, conflit: "Store", raison: "x"}], false);
+  R.invalide = await cas([{ok: false, raison: "frappe invalide"}], true);
+  process.stdout.write(JSON.stringify(R));
+})();
+""")
+    r = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=20)
+    if r.returncode != 0:
+        echec("poserRaccourciConsole a planté dans node", r.stderr[:300])
+        return
+    R = json.loads(r.stdout)
+    ennuis = []
+    L, O, N, I = R["libre"], R["oui"], R["non"], R["invalide"]
+    if not L["r"]["applique"] or len(L["appels"]) != 1 or L["confirms"]:
+        ennuis.append(f"cas libre : {L}")
+    if not (O["r"]["applique"] and O["r"]["autre"] == "Store" and len(O["appels"]) == 2
+            and O["appels"][1].get("remplacer") is True and O["confirms"] == 1
+            and O["cles"] == {"Store": "", "Move": "S"}):
+        ennuis.append(f"cas « oui » : {O}")
+    if not (N["r"]["applique"] is False and len(N["appels"]) == 1 and N["confirms"] == 1
+            and N["cles"] == {"Store": "s", "Move": "m"}):
+        ennuis.append(f"cas « non » : {N}")
+    if I["r"]["applique"] or I["confirms"] or I["alertes"] != 1:
+        ennuis.append(f"cas frappe invalide : {I}")
+    if ennuis:
+        echec("poserRaccourciConsole se comporte mal (node)", " ; ".join(ennuis))
+    else:
+        ok("interface : les deux champs passent par poserRaccourciConsole ; "
+           "libre = 1 envoi, « oui » = renvoi avec remplacer + les deux tokens "
+           "mis à jour, « non » = rien changé, frappe invalide = alerte (node)")
+
+
+def test_raccourcis_uniques(wm, ui=None):
     section("17. Unicité des raccourcis console")
+    if ui is not None:
+        _controle_conflit_saisie(wm, ui)
     table = wm.CONSOLE_KEY_DEFAULTS
     par_frappe = {}
     for token, spec in table.items():

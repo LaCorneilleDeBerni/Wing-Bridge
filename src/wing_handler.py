@@ -1022,11 +1022,32 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "raison": _L("err.raccourci_invalide")})
             return
         cle = cle.strip()
+        remplacer = body.get("remplacer") is True
+        # 🔑 Une frappe ne peut porter qu'UNE fonction : MA3 ne saurait pas
+        # laquelle déclencher. Conflit sans « remplacer » : on ne change RIEN
+        # et on dit quel token la porte ; l'interface demande à l'utilisateur.
+        # Détection et écriture sous le MÊME verrou : pas de course entre deux
+        # saisies. L'autre token est désassigné ("") et le courant reçoit la
+        # frappe dans la même section critique, un seul mark_dirty.
+        autre = None
         with etat.E.LOCK:
-            etat.E.PROFILE.setdefault("console_keys", {})
+            touches = etat.E.PROFILE.setdefault("console_keys", {})
             if token:
-                etat.E.PROFILE["console_keys"][token] = cle
-        core.log("journal.console.raccourci", token=token, key=cle)
+                autre = wm.conflit_raccourci(touches, token, cle)
+                if autre is None or remplacer:
+                    if autre is not None:
+                        touches[autre] = ""
+                    touches[token] = cle
+        if autre is not None and not remplacer:
+            self._json({"ok": False, "conflit": autre,
+                        "raison": _L("err.raccourci_conflit", autre=autre,
+                                     key=cle)})
+            return
+        if autre is not None:
+            core.log("journal.console.raccourci_remplace", token=token,
+                     key=cle, autre=autre)
+        else:
+            core.log("journal.console.raccourci", token=token, key=cle)
         core.mark_dirty()
         self._json({"ok": True})
 

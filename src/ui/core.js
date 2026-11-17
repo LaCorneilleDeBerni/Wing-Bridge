@@ -93,6 +93,35 @@ async function api(path, body) {
   return d;
 }
 
+// ── Raccourci clavier d'un token : UNE seule porte d'envoi ─────────────
+// Une frappe ne peut porter qu'une fonction (MA3 ne saurait pas laquelle
+// déclencher). Le moteur refuse un doublon et nomme le token qui porte déjà la
+// frappe ; on demande alors à l'utilisateur s'il faut la lui retirer.
+// ⚠️ TOUT envoi du raccourci d'un token passe ici (profils.js ET touches.js) :
+//    un appel direct contournerait la confirmation. Contrôlé au test de fumée.
+// Renvoie {applique: bool, autre: token désassigné ou null}. Quand `applique`
+// est faux, l'appelant remet l'ancienne valeur dans son champ.
+async function poserRaccourciConsole(tok, valeur) {
+  const cle = String(valeur || "").trim();
+  let d = await api("/api/console/key", {token: tok, key: cle});
+  let autre = null;
+  if (d && d.conflit) {
+    if (!confirm(t("ui.touches.rac.confirm_remplacer", {autre: d.conflit}))) {
+      return {applique: false, autre: null};
+    }
+    autre = d.conflit;
+    d = await api("/api/console/key", {token: tok, key: cle, remplacer: true});
+  }
+  if (!d || !d.ok) {
+    if (d && d.raison) alert(d.raison);
+    return {applique: false, autre: null};
+  }
+  profile.console_keys = profile.console_keys || {};
+  profile.console_keys[tok] = cle;
+  if (autre) profile.console_keys[autre] = "";
+  return {applique: true, autre: autre};
+}
+
 // ── Panneau santé : met à jour une pastille (cls: on|warn|off|"") ──────
 // Met à jour une pastille de la barre d'états.
 //

@@ -623,6 +623,43 @@ encadrée en rouge pour le désigner sans ambiguïté, en data URI directement
 dans `wing_ui.html` (pas de nouvelle route serveur ni de fichier statique
 séparé pour une seule image d'onboarding).
 
+## Une frappe ne porte qu'une fonction : confirmation avant remplacement (17/11/2026)
+
+Deux tokens sur la même frappe : MA3 ne saurait pas lequel déclencher (l'envoi
+des raccourcis s'arrêtait déjà dans ce cas, mais tard et sans dire quoi
+changer). La saisie le refuse maintenant **à la source** et demande à
+l'utilisateur, au lieu de lui faire chercher les touches libres.
+
+- **Comparaison** : `wing_mapper.normaliser_frappe()` — minuscules, espaces
+  retirés, alias unifiés (`ctrl`/`control`/`ctl`, `cmd`/`command`,
+  `alt`/`option`/`opt`), ordre des modificateurs sans importance. Chaîne vide :
+  jamais en conflit. `conflit_raccourci(console_keys, token, cle)` rend le
+  token qui porte déjà la frappe (autre que `token`) ou `None`. La forme
+  normalisée ne sert qu'à comparer : ce qui est stocké et envoyé reste la
+  frappe saisie.
+- **Route** `POST /api/console/key` (`_post_console_key`) : conflit **sans**
+  `"remplacer": true` → rien n'est modifié, réponse
+  `{"ok": false, "conflit": "<autre token>", "raison": …}`. **Avec**
+  `"remplacer": true` → l'autre token passe à `""` et le courant reçoit la
+  frappe, sous le même `etat.E.LOCK`, un seul `mark_dirty`, une ligne de
+  journal `journal.console.raccourci_remplace`. Même token + même frappe : pas
+  de conflit.
+- **Interface** : `poserRaccourciConsole(tok, valeur)` (`ui/core.js`) est la
+  SEULE porte d'envoi ; les deux champs de saisie (colonne « Raccourci clavier »
+  des touches, `ui/profils.js`, et grille « Autres raccourcis »,
+  `ui/touches.js`) l'appellent. Sur conflit, un `confirm()` (clé
+  `ui.touches.rac.confirm_remplacer`) ; « Non » remet l'ancienne valeur dans le
+  champ, « Oui » renvoie avec `remplacer` puis redessine le profil. ⚠️ Ne
+  jamais rappeler `/api/console/key` directement : le contrôle de la section 17
+  le refuse.
+- **Ce qui peut encore créer un doublon** (non vérifié en usage réel) : l'import
+  d'un profil et le chargement (`valider_types` filtre les frappes invalides,
+  pas les doublons) ; `migrate_profile`, qui ajoute les raccourcis par défaut
+  manquants sans regarder si l'utilisateur a pris la frappe ; un profil déjà
+  enregistré avec un doublon (la détection ne signale alors que le premier
+  porteur trouvé). La réinitialisation (`/api/console/reset`) restaure la table
+  par défaut, sans doublon (contrôle section 17).
+
 ## Affecter une touche : validation et renumérotation (25/09/2026)
 
 `POST /api/assign` passe par `wing_boutons.affectation(body)`, qui décide de

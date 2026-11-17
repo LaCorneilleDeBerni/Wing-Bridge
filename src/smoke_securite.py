@@ -1171,7 +1171,8 @@ def test_raccourcis_filtres(ui):
                  for v in _FRAPPES_PIEGEES.values()]
         pris = [v for v in _FRAPPES_PIEGEES.values()
                 if etat.E.PROFILE["console_keys"].get("Store") == v]
-        bon = _poster(ui, "/api/console/key", {"token": "Store", "key": "Ctrl+Alt+S"})
+        bon = _poster(ui, "/api/console/key", {"token": "Store", "key": "Ctrl+Alt+S",
+                                          "remplacer": True})   # Solo la porte déjà
         bon_pris = etat.E.PROFILE["console_keys"].get("Store") == "Ctrl+Alt+S"
     finally:
         injection.__exit__(None, None, None)

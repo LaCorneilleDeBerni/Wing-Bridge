@@ -226,8 +226,11 @@ function renderConsoleKeys() {
       esc(tok) + "</span><input type='text' value='" + esc(keys[tok] || "") +
       "' placeholder='—' style='width:60px;text-align:center;font-size:12px;padding:5px'>";
     d.querySelector("input[type=text]").onchange = async (e) => {
-      await api("/api/console/key", {token: tok, key: e.target.value});
-      profile.console_keys[tok] = e.target.value.trim();
+      const avant = (profile.console_keys || {})[tok] || "";
+      const r = await poserRaccourciConsole(tok, e.target.value);
+      if (!r.applique) { e.target.value = avant; return; }
+      e.target.value = e.target.value.trim();
+      if (r.autre) loadProfile();    // l'autre champ perd sa frappe : on le redessine
       shcutsRafraichir();
     };
     el.appendChild(d);

@@ -9,6 +9,15 @@ the project aims for [semantic versioning](https://semver.org/).
 
 ### Added
 
+- A keystroke can only carry one function: assigning a keyboard shortcut that
+  another key already uses now asks “This key is already set on X. Replace it?
+  X will no longer have a shortcut.” instead of silently creating a duplicate.
+  Yes unassigns X and applies the new shortcut in one step; No keeps the old
+  value. Same keystroke written differently (Ctrl/Control, Cmd/Command,
+  Alt/Option, modifier order, case) counts as the same. Applies to both entry
+  points (key table and “Other shortcuts”). A profile import or a migration can
+  still bring a duplicate in (not covered by this prompt).
+
 - Single setup assistant (first pass): a “Setup” button in Settings opens one
   blurred window with cards, same layout as the firmware capture assistant.
   It covers Firmware, OSC, Plugin and Check. Every step is always shown: green

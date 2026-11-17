@@ -90,8 +90,11 @@ async function loadProfile() {
     };
     const champRac = tr.querySelector(".rac");
     if (champRac) champRac.onchange = async (e) => {
-      await api("/api/console/key", {token: tok, key: e.target.value});
-      profile.console_keys[tok] = e.target.value.trim();
+      const avant = (profile.console_keys || {})[tok] || "";
+      const r = await poserRaccourciConsole(tok, e.target.value);
+      if (!r.applique) { e.target.value = avant; return; }
+      e.target.value = e.target.value.trim();
+      if (r.autre) loadProfile();    // l'autre ligne perd sa frappe : on la redessine
       shcutsRafraichir();            // l'écart avec MA3 change : on le redit
     };
     const champDbl = tr.querySelector(".dbl");

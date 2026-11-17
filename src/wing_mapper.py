@@ -148,6 +148,48 @@ def raccourci_valide(spec) -> bool:
         and base not in _CARACTERES_INTERDITS
 
 
+# Alias de modificateurs qui désignent la MÊME touche : « ctrl », « control » et
+# « ctl » ne sont pas trois frappes différentes pour l'assistant clavier.
+_ALIAS_MODIFICATEURS = {"control": "ctrl", "ctl": "ctrl", "command": "cmd",
+                        "option": "alt", "opt": "alt"}
+
+
+def normaliser_frappe(spec) -> str:
+    """Forme canonique d'une frappe, POUR LA COMPARER (jamais pour l'envoyer).
+
+    Minuscules, espaces retirés, alias de modificateurs unifiés (ctrl/control/
+    ctl, cmd/command, alt/option/opt), ordre des modificateurs sans importance.
+    "" (désassignée) ou non-chaîne -> "" : jamais en conflit.
+    """
+    if not isinstance(spec, str):
+        return ""
+    s = spec.strip().lower()
+    if s == "":
+        return ""
+    if len(s) == 1:                    # « + » seul : pas un séparateur
+        return s
+    parts = [p.strip() for p in s.split("+")]
+    *mods, base = parts
+    mods = sorted({_ALIAS_MODIFICATEURS.get(m, m) for m in mods if m})
+    return "+".join(mods + [base])
+
+
+def conflit_raccourci(console_keys, token, cle):
+    """Le token qui porte DÉJÀ la frappe `cle` (autre que `token`), sinon None.
+
+    Deux tokens sur la même frappe : MA3 ne saurait pas lequel déclencher.
+    Une frappe vide n'est jamais en conflit ; le même token qui reprend sa
+    propre frappe non plus.
+    """
+    cible = normaliser_frappe(cle)
+    if not cible or not isinstance(console_keys, dict):
+        return None
+    for autre, spec in console_keys.items():
+        if autre != token and normaliser_frappe(spec) == cible:
+            return autre
+    return None
+
+
 def keycode_de(token: str) -> str:
     """KeyCode MA3 correspondant à un token de l'app."""
     return TOKEN_VERS_KEYCODE.get(token, token.upper())
